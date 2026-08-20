@@ -1,0 +1,58 @@
+<UserControl x:Class="FkcScoring.App.Views.ParticipantsView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <TextBlock x:Name="TxtAvertissement" Text="Créez d'abord une compétition (onglet 1)." FontSize="16" Foreground="#888" Visibility="Collapsed"/>
+
+        <ScrollViewer x:Name="PanelContenu" VerticalScrollBarVisibility="Auto">
+            <StackPanel MaxWidth="900" HorizontalAlignment="Left">
+                <TextBlock Text="Participants" Style="{StaticResource TitreEcran}"/>
+
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Prénom" Style="{StaticResource Etiquette}"/>
+                        <TextBox x:Name="TxtPrenom" Style="{StaticResource Champ}"/>
+                        <TextBlock Text="Nom" Style="{StaticResource Etiquette}"/>
+                        <TextBox x:Name="TxtNom" Style="{StaticResource Champ}"/>
+                        <TextBlock Text="Club" Style="{StaticResource Etiquette}"/>
+                        <TextBox x:Name="TxtClub" Style="{StaticResource Champ}"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Grade (ceinture)" Style="{StaticResource Etiquette}"/>
+                        <TextBox x:Name="TxtGrade" Style="{StaticResource Champ}"/>
+                        <TextBlock Text="Date de naissance" Style="{StaticResource Etiquette}"/>
+                        <DatePicker x:Name="DpNaissance" Style="{StaticResource Champ}"/>
+                        <TextBlock Text="Sexe (M/F)" Style="{StaticResource Etiquette}"/>
+                        <TextBox x:Name="TxtSexe" Style="{StaticResource Champ}" MaxLength="1"/>
+                    </StackPanel>
+                </Grid>
+
+                <Button Content="Ajouter le participant" Style="{StaticResource BoutonAction}" HorizontalAlignment="Left" Click="AjouterParticipant_Click"/>
+
+                <TextBlock Text="Inscrire à une catégorie" FontSize="16" FontWeight="Bold" Margin="0,28,0,8"/>
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="16"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox x:Name="CmbParticipantInscription" Grid.Column="0" Height="32" VerticalAlignment="Top"/>
+                    <ComboBox x:Name="CmbCategorieInscription" Grid.Column="2" Height="32" VerticalAlignment="Top"/>
+                    <Button Grid.Column="4" Content="Inscrire" Style="{StaticResource BoutonAction}" Click="Inscrire_Click"/>
+                </Grid>
+
+                <TextBlock Text="Participants inscrits" FontSize="16" FontWeight="Bold" Margin="0,28,0,8"/>
+                <ListBox x:Name="LstParticipants" Height="280"/>
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

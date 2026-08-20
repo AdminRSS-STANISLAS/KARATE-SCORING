@@ -1,0 +1,54 @@
+<UserControl x:Class="FkcScoring.App.Views.CompetitionView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel MaxWidth="700" HorizontalAlignment="Left">
+            <TextBlock Text="Compétition" Style="{StaticResource TitreEcran}"/>
+
+            <StackPanel x:Name="PanelCreation">
+                <TextBlock Text="Nom de la compétition" Style="{StaticResource Etiquette}"/>
+                <TextBox x:Name="TxtNom" Style="{StaticResource Champ}"/>
+
+                <TextBlock Text="Date" Style="{StaticResource Etiquette}"/>
+                <DatePicker x:Name="DpDate" Style="{StaticResource Champ}"/>
+
+                <TextBlock Text="Lieu" Style="{StaticResource Etiquette}"/>
+                <TextBox x:Name="TxtLieu" Style="{StaticResource Champ}"/>
+
+                <TextBlock Text="Niveau" Style="{StaticResource Etiquette}"/>
+                <ComboBox x:Name="CmbNiveau" Style="{StaticResource Champ}">
+                    <ComboBoxItem Content="Club" IsSelected="True"/>
+                    <ComboBoxItem Content="Ligue"/>
+                    <ComboBoxItem Content="National"/>
+                </ComboBox>
+
+                <Button Content="Créer la compétition" Style="{StaticResource BoutonAction}" HorizontalAlignment="Left" Click="CreerCompetition_Click"/>
+            </StackPanel>
+
+            <StackPanel x:Name="PanelDetail" Visibility="Collapsed">
+                <Border Background="#F5F5F5" Padding="16" Margin="0,0,0,20">
+                    <StackPanel>
+                        <TextBlock x:Name="TxtInfoCompetition" FontSize="16" FontWeight="Bold"/>
+                        <TextBlock x:Name="TxtInfoParametres" FontSize="12" Foreground="#666" Margin="0,4,0,0"/>
+                    </StackPanel>
+                </Border>
+
+                <TextBlock Text="Ajouter une catégorie" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                <TextBlock Text="Nom de la catégorie" Style="{StaticResource Etiquette}"/>
+                <TextBox x:Name="TxtNomCategorie" Style="{StaticResource Champ}"/>
+
+                <TextBlock Text="Discipline" Style="{StaticResource Etiquette}"/>
+                <ComboBox x:Name="CmbDiscipline" Style="{StaticResource Champ}">
+                    <ComboBoxItem Content="Kumite individuel" IsSelected="True"/>
+                    <ComboBoxItem Content="Kata individuel"/>
+                    <ComboBoxItem Content="Kata par équipe"/>
+                </ComboBox>
+
+                <Button Content="Ajouter la catégorie" Style="{StaticResource BoutonAction}" HorizontalAlignment="Left" Click="AjouterCategorie_Click"/>
+
+                <TextBlock Text="Catégories de la compétition" FontSize="16" FontWeight="Bold" Margin="0,24,0,8"/>
+                <ListBox x:Name="LstCategories" Height="220"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

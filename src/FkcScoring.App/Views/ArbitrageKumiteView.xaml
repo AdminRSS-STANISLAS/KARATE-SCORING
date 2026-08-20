@@ -1,0 +1,84 @@
+<UserControl x:Class="FkcScoring.App.Views.ArbitrageKumiteView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <TextBlock x:Name="TxtAvertissement" Text="Générez d'abord un tableau (onglet 3)." FontSize="16" Foreground="#888" Visibility="Collapsed"/>
+
+        <DockPanel x:Name="PanelContenu">
+            <StackPanel DockPanel.Dock="Top">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="Arbitrage Kumite" Style="{StaticResource TitreEcran}"/>
+                    <Button x:Name="BtnDiffuser" Grid.Column="1" Content="📺 Diffuser sur écran TV" Style="{StaticResource BoutonAction}" VerticalAlignment="Top" Click="Diffuser_Click"/>
+                </Grid>
+                <TextBlock Text="Combat" Style="{StaticResource Etiquette}"/>
+                <ComboBox x:Name="CmbCombat" Width="500" HorizontalAlignment="Left" Height="32" Margin="0,4,0,12" SelectionChanged="CmbCombat_SelectionChanged"/>
+            </StackPanel>
+
+            <StackPanel x:Name="PanelCombat" DockPanel.Dock="Top">
+                <!-- Chronomètre et contrôles -->
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,16">
+                    <TextBlock x:Name="TxtChrono" Text="03:00" FontSize="56" FontWeight="Bold" Margin="0,0,24,0" Foreground="#D4AF37"/>
+                    <Button x:Name="BtnDemarrer" Content="Démarrer" Style="{StaticResource BoutonAction}" Click="Demarrer_Click"/>
+                    <Button x:Name="BtnPause" Content="Pause" Style="{StaticResource BoutonAction}" Margin="8,0,0,0" Click="Pause_Click"/>
+                    <Button x:Name="BtnFinDuTemps" Content="Fin du temps" Style="{StaticResource BoutonAction}" Margin="8,0,0,0" Click="FinDuTemps_Click"/>
+                </StackPanel>
+
+                <!-- Deux compétiteurs -->
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <Border Grid.Column="0" Background="#2A0008" Margin="0,0,6,0" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="AKA" FontSize="18" FontWeight="Bold" Foreground="#E4002B" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNomAka" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock x:Name="TxtScoreAka" Text="0" FontSize="96" FontWeight="Bold" Foreground="#E4002B" HorizontalAlignment="Center"/>
+                            <UniformGrid Rows="1" Columns="3" Margin="0,12,0,0">
+                                <Button Content="Yuko (1)" Style="{StaticResource BoutonPoint}" Background="#F0899E" Tag="1" Click="PointAka_Click"/>
+                                <Button Content="Waza-ari (2)" Style="{StaticResource BoutonPoint}" Background="#E84E6C" Tag="2" Click="PointAka_Click"/>
+                                <Button Content="Ippon (3)" Style="{StaticResource BoutonPoint}" Background="#E4002B" Foreground="White" Tag="3" Click="PointAka_Click"/>
+                            </UniformGrid>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0" HorizontalAlignment="Center">
+                                <ComboBox x:Name="CmbPenaliteAka" Width="150" Height="32"/>
+                                <Button Content="Pénalité" Style="{StaticResource BoutonAction}" Margin="8,0,0,0" Click="PenaliteAka_Click"/>
+                            </StackPanel>
+                            <Button x:Name="BtnHanteiAka" Content="Hantei : victoire Aka" Style="{StaticResource BoutonAction}" Margin="0,12,0,0" Visibility="Collapsed" Click="HanteiAka_Click"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Grid.Column="1" Background="#001A33" Margin="6,0,0,0" Padding="12">
+                        <StackPanel>
+                            <TextBlock Text="AO" FontSize="18" FontWeight="Bold" Foreground="#1565C0" HorizontalAlignment="Center"/>
+                            <TextBlock x:Name="TxtNomAo" FontSize="22" FontWeight="Bold" HorizontalAlignment="Center" Margin="0,4,0,4"/>
+                            <TextBlock x:Name="TxtScoreAo" Text="0" FontSize="96" FontWeight="Bold" Foreground="#1565C0" HorizontalAlignment="Center"/>
+                            <UniformGrid Rows="1" Columns="3" Margin="0,12,0,0">
+                                <Button Content="Yuko (1)" Style="{StaticResource BoutonPoint}" Background="#90CAF9" Tag="1" Click="PointAo_Click"/>
+                                <Button Content="Waza-ari (2)" Style="{StaticResource BoutonPoint}" Background="#64B5F6" Tag="2" Click="PointAo_Click"/>
+                                <Button Content="Ippon (3)" Style="{StaticResource BoutonPoint}" Background="#1565C0" Foreground="White" Tag="3" Click="PointAo_Click"/>
+                            </UniformGrid>
+                            <StackPanel Orientation="Horizontal" Margin="0,12,0,0" HorizontalAlignment="Center">
+                                <ComboBox x:Name="CmbPenaliteAo" Width="150" Height="32"/>
+                                <Button Content="Pénalité" Style="{StaticResource BoutonAction}" Margin="8,0,0,0" Click="PenaliteAo_Click"/>
+                            </StackPanel>
+                            <Button x:Name="BtnHanteiAo" Content="Hantei : victoire Ao" Style="{StaticResource BoutonAction}" Margin="0,12,0,0" Visibility="Collapsed" Click="HanteiAo_Click"/>
+                        </StackPanel>
+                    </Border>
+                </Grid>
+
+                <TextBlock x:Name="TxtEtatCombat" FontSize="15" FontWeight="Bold" Foreground="#D4AF37" Margin="0,16,0,0" HorizontalAlignment="Center"/>
+                <Button x:Name="BtnEnregistrer" Content="Valider le résultat du combat" Style="{StaticResource BoutonAction}" Margin="0,12,0,0" HorizontalAlignment="Center" Visibility="Collapsed" Click="Enregistrer_Click"/>
+            </StackPanel>
+
+            <StackPanel DockPanel.Dock="Top" Margin="0,20,0,0">
+                <TextBlock Text="Historique" FontSize="16" FontWeight="Bold" Margin="0,0,0,8"/>
+                <ListBox x:Name="LstHistorique" Height="150"/>
+            </StackPanel>
+        </DockPanel>
+    </Grid>
+</UserControl>

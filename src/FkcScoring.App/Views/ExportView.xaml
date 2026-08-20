@@ -1,0 +1,17 @@
+<UserControl x:Class="FkcScoring.App.Views.ExportView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <StackPanel MaxWidth="700" HorizontalAlignment="Left">
+        <TextBlock Text="Export" Style="{StaticResource TitreEcran}"/>
+        <TextBlock TextWrapping="Wrap" Margin="0,0,0,20" FontSize="13" Foreground="#555">
+            Ce bouton génère le rapport PDF Kumite (tous les combats disputés) et le classement Excel de la
+            compétition en cours, fait une copie de sauvegarde horodatée de la base de données, PUIS vide
+            toutes les données de la compétition pour repartir de zéro. Rien n'est perdu : la sauvegarde
+            reste disponible si besoin de revenir en arrière.
+        </TextBlock>
+
+        <Button Content="Exporter les résultats et réinitialiser" Style="{StaticResource BoutonAction}" HorizontalAlignment="Left" Click="Exporter_Click"/>
+
+        <TextBlock x:Name="TxtResultat" Margin="0,20,0,0" FontSize="13" TextWrapping="Wrap"/>
+    </StackPanel>
+</UserControl>

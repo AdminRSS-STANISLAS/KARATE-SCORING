@@ -11,6 +11,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FkcScoring.App", "src\FkcSc
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FkcScoring.Core.Tests", "tests\FkcScoring.Core.Tests\FkcScoring.Core.Tests.csproj", "{371BB7F3-A9AC-4C0B-B9AE-59E8D26045EC}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "KarateScoring.Api", "src\KarateScoring.Api\KarateScoring.Api.csproj", "{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -57,6 +59,18 @@ Global
 		{371BB7F3-A9AC-4C0B-B9AE-59E8D26045EC}.Release|x64.Build.0 = Release|Any CPU
 		{371BB7F3-A9AC-4C0B-B9AE-59E8D26045EC}.Release|x86.ActiveCfg = Release|Any CPU
 		{371BB7F3-A9AC-4C0B-B9AE-59E8D26045EC}.Release|x86.Build.0 = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|x64.Build.0 = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Debug|x86.Build.0 = Debug|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|Any CPU.Build.0 = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|x64.ActiveCfg = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|x64.Build.0 = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|x86.ActiveCfg = Release|Any CPU
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -65,5 +79,6 @@ Global
 		{7985833B-A26F-4852-9EAA-F0CB485B5548} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{C21703D3-6207-4EC7-8769-224C28A5FDE9} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 		{371BB7F3-A9AC-4C0B-B9AE-59E8D26045EC} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
+		{EC0D4B18-D5D9-43B4-B328-C1469EE0828F} = {827E0CD3-B72D-47B6-A68D-7590B98EB39B}
 	EndGlobalSection
 EndGlobal

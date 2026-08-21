@@ -20,7 +20,7 @@ public class KumiteReportBuilder
 
                 page.Header().Column(col =>
                 {
-                    col.Item().Text("FKC Scoring — Rapport Kumite").FontSize(18).Bold();
+                    col.Item().Text("Karate Scoring — Rapport Kumite").FontSize(18).Bold();
                     col.Item().Text($"{competition.Nom} — {competition.Date:dd/MM/yyyy}" +
                         (filtreCategorie != null ? $" — Catégorie : {filtreCategorie}" : " — Toutes catégories"))
                         .FontSize(10);

@@ -17,6 +17,10 @@ public class Competition
     public int DureeCombatDefautSec { get; set; } = 180;
     public int NbJugesKataDefaut { get; set; } = 5;
 
+    // Seuils de format de tableau (cahier 5.3), ajustables par l'organisateur.
+    public int SeuilPouleUnique { get; set; } = 4;
+    public int SeuilPoulePuisElimination { get; set; } = 7;
+
     public DateTime CreatedAt { get; set; } = DateTime.Now;
 
     public List<Categorie> Categories { get; set; } = new();

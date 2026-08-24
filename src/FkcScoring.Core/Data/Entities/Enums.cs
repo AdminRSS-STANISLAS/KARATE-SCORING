@@ -1,6 +1,6 @@
 namespace FkcScoring.Core.Data.Entities;
 
-public enum NiveauCompetition { Club, Ligue, National }
+public enum NiveauCompetition { Amicale, Club, Ligue, National }
 
 public enum Discipline { KumiteIndividuel, KataIndividuel, KataEquipe }
 

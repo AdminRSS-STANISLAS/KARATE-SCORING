@@ -33,6 +33,12 @@ public class FkcScoringContext : DbContext
             .HasForeignKey(c => c.ProchainCombatId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        modelBuilder.Entity<KataConfrontation>()
+            .HasOne(c => c.ProchainConfrontation)
+            .WithMany()
+            .HasForeignKey(c => c.ProchainConfrontationId)
+            .OnDelete(DeleteBehavior.Restrict);
+
         modelBuilder.Entity<Kata>().HasData(SeedKatas());
     }
 

@@ -433,13 +433,15 @@ function renderTableauBody(tableau, cat) {
   if (tableau.format === "PouleUnique") {
     html += renderPouleTable(tableau.confrontations, null);
   } else if (tableau.format === "PoulePuisElimination") {
-    html += `<div class="grid grid-2">${renderPouleTable(tableau.confrontations.filter((c) => c.moitie === 1), "Poule 1")}${renderPouleTable(tableau.confrontations.filter((c) => c.moitie === 2), "Poule 2")}</div>`;
+    html += `<div class="grid grid-2">${renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1 && c.moitie === 1), "Poule 1")}${renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1 && c.moitie === 2), "Poule 2")}</div>`;
     const poulesDone = tableau.confrontations.filter((c) => c.tour === 1).every((c) => c.statut === "Termine");
     const elimGenerated = tableau.confrontations.some((c) => c.tour >= 2);
     if (poulesDone && !elimGenerated) {
       html += `<button class="btn btn-primary btn-sm" data-action="gen-elim-apres-poules" data-tab="${tableau.id}" style="margin-top:6px;">Générer la phase à élimination directe</button>`;
     } else if (elimGenerated) {
       html += `<h4 style="margin:16px 0 8px;font-size:14px;">Phase à élimination directe</h4>${renderBracket(tableau.confrontations.filter((c) => c.tour >= 2 && !c.estRepechage))}`;
+      const rep = tableau.confrontations.filter((c) => c.estRepechage);
+      if (rep.length) html += `<h4 style="margin:16px 0 8px;font-size:14px;">Repêchage — deux médailles de bronze</h4>${renderBracket(rep, true)}`;
     } else {
       html += '<p class="hint" style="margin-top:8px;">Terminez toutes les rencontres de poule pour générer la phase finale.</p>';
     }

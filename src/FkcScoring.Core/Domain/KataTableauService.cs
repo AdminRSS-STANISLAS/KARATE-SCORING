@@ -103,12 +103,14 @@ public class KataTableauService
             throw new InvalidOperationException("Ce tableau n'est pas au format poule(s) puis élimination.");
 
         var confrontationsPoules = _db.KataConfrontations.Include(c => c.Votes).Where(c => c.TableauId == tableauId).ToList();
-        var qualifies = new List<int>();
-        foreach (var moitie in new[] { 1, 2 })
-        {
-            var classement = ClasserPoule(confrontationsPoules.Where(c => c.Moitie == moitie), discipline);
-            qualifies.AddRange(classement.Take(2).Select(c => c.CompetiteurId));
-        }
+        var poule1 = ClasserPoule(confrontationsPoules.Where(c => c.Moitie == 1), discipline).Take(2).Select(c => c.CompetiteurId).ToList();
+        var poule2 = ClasserPoule(confrontationsPoules.Where(c => c.Moitie == 2), discipline).Take(2).Select(c => c.CompetiteurId).ToList();
+        if (poule1.Count < 2 || poule2.Count < 2)
+            throw new InvalidOperationException("Chaque poule doit compter au moins 2 compétiteurs classés pour générer la phase à élimination directe.");
+
+        // Tirage croisé (1er poule 1 contre 2e poule 2, 1er poule 2 contre 2e poule 1) : évite
+        // qu'une demi-finale n'oppose deux compétiteurs déjà départagés en poule.
+        var qualifies = new List<int> { poule1[0], poule2[1], poule2[0], poule1[1] };
 
         GenererArbreElimination(tableauId, qualifies, discipline, nbJuges, estRepechage: false, moitieUnique: null, tourDepart: 2);
     }
@@ -203,11 +205,36 @@ public class KataTableauService
     private void TraiterFinDemiFinale(KataConfrontation demiFinale, Discipline discipline)
     {
         var format = _db.Tableaux.Where(t => t.Id == demiFinale.TableauId).Select(t => t.Format).Single();
-        if (format != FormatTableau.EliminationRepechage) return;
+        if (format != FormatTableau.EliminationRepechage && format != FormatTableau.PoulePuisElimination) return;
 
         if (demiFinale.Moitie == null) return; // c'est la finale (fusion des deux moitiés), pas une demi-finale
         var prochain = demiFinale.ProchainConfrontationId == null ? null : _db.KataConfrontations.Find(demiFinale.ProchainConfrontationId);
         if (prochain == null || prochain.Moitie != null) return; // ne mène pas directement à la finale
+
+        if (format == FormatTableau.PoulePuisElimination)
+        {
+            // Ici la "demi-finale" est le tout premier (et seul) match de sa moitié — pas de tour
+            // antérieur dans l'arbre à parcourir comme au repêchage classique — donc le perdant du
+            // match est directement le bronze de cette moitié, sans mini-tableau de repêchage.
+            var perdantDirectId = demiFinale.VainqueurCouleur == Couleur.Aka
+                ? CompetiteurId(demiFinale, Couleur.Ao, discipline)
+                : CompetiteurId(demiFinale, Couleur.Aka, discipline);
+            if (perdantDirectId == null) return;
+            var bronzeDirect = new KataConfrontation
+            {
+                TableauId = demiFinale.TableauId,
+                Tour = demiFinale.Tour + 1,
+                Moitie = demiFinale.Moitie,
+                EstRepechage = true,
+                EstBye = true,
+                Statut = StatutCombat.Termine,
+                VainqueurCouleur = Couleur.Aka,
+                NbJuges = demiFinale.NbJuges
+            };
+            SetCompetiteur(bronzeDirect, Couleur.Aka, perdantDirectId, discipline);
+            _db.KataConfrontations.Add(bronzeDirect);
+            return;
+        }
 
         var finalisteId = GetVainqueurId(demiFinale, discipline);
         if (finalisteId == null) return;

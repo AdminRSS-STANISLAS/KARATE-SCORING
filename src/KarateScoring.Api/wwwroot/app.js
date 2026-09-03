@@ -34,6 +34,20 @@ const api = {
   put: (p, b) => apiFetch("PUT", p, b === undefined ? {} : b),
   del: (p) => apiFetch("DELETE", p),
 };
+/* Upload multipart (FormData) : distinct d'apiFetch, qui envoie toujours du JSON. */
+async function apiUpload(path, formData) {
+  const headers = {};
+  if (operateurNom) headers["X-Operateur"] = operateurNom;
+  const res = await fetch("/api" + path, { method: "POST", headers, body: formData });
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch (e) { data = text; } }
+  if (!res.ok) {
+    const msg = (data && typeof data === "object" && (data.detail || data.title)) || (typeof data === "string" ? data : null) || (res.status + " " + res.statusText);
+    throw new Error(msg);
+  }
+  return data;
+}
 async function safe(fn) {
   try { await fn(); return true; }
   catch (e) { toast(e.message || String(e), true); return false; }
@@ -74,6 +88,13 @@ function setActiveCompetition(id) {
   localStorage.setItem("karate_scoring_active_competition", id ? String(id) : "");
 }
 function activeComp() { return competitionsCache.find((c) => c.id === activeCompetitionId) || null; }
+
+/* Retourne le code saisi si un code admin est configuré, null si aucun n'est requis, ou undefined si l'utilisateur annule la saisie. */
+function demanderCodeAdminSiConfigure() {
+  if (!(securiteCache && securiteCache.codeConfigure)) return null;
+  const code = prompt("Code administrateur requis :");
+  return code == null ? undefined : code;
+}
 
 function toast(msg, isErr) {
   const wrap = document.getElementById("toastWrap");
@@ -819,6 +840,35 @@ async function screenSecurite() {
       <div></div>
       <div style="grid-column:1/-1"><button class="btn btn-primary btn-sm" type="submit">${configure ? "Changer le code" : "Configurer le code"}</button></div>
     </form>
+  </div>
+
+  ${await renderSauvegardes()}`;
+}
+
+/* ---- Sauvegardes ---- */
+function fmtTaille(octets) {
+  if (octets < 1024) return octets + " o";
+  if (octets < 1024 * 1024) return (octets / 1024).toFixed(0) + " Ko";
+  return (octets / (1024 * 1024)).toFixed(1) + " Mo";
+}
+
+async function renderSauvegardes() {
+  const sauvegardes = await api.get("/sauvegardes").catch(() => []);
+  const rows = sauvegardes.map((s) => `<tr><td>${esc(s.nom)}</td><td>${new Date(s.creeLe).toLocaleString("fr-FR")}</td><td>${fmtTaille(s.tailleOctets)}</td>
+    <td><button class="btn btn-sm btn-danger" data-action="restaurer-sauvegarde" data-nom="${esc(s.nom)}">Restaurer</button></td></tr>`).join("");
+
+  return `<div class="card"><h3>Sauvegardes</h3>
+    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste.</p>
+    <a class="btn btn-primary btn-sm" href="/api/sauvegardes/telecharger" download>Télécharger une sauvegarde maintenant</a>
+    ${rows ? `<div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Fichier</th><th>Créée le</th><th>Taille</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucune sauvegarde pour l\'instant.</p>'}
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;">
+      <h4 style="font-size:13px;margin-bottom:8px;">Importer une sauvegarde externe</h4>
+      <p class="error" style="margin-bottom:10px;">Remplace immédiatement toutes les données actuelles (une sauvegarde de l'état présent est prise automatiquement avant).</p>
+      <form id="form-importer-sauvegarde" class="row-inline">
+        <input type="file" name="fichier" accept=".db" required>
+        <button class="btn btn-sm btn-danger" type="submit">Importer et restaurer</button>
+      </form>
+    </div>
   </div>`;
 }
 
@@ -887,12 +937,16 @@ appEl.addEventListener("click", async (e) => {
   if (a === "seed-demo") { await safe(seedDemo); return; }
   if (a === "reset-all") {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;
-    let code = null;
-    if (securiteCache && securiteCache.codeConfigure) {
-      code = prompt("Code administrateur requis pour réinitialiser :");
-      if (code == null) return;
-    }
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) return;
     if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    await renderApp(); return;
+  }
+  if (a === "restaurer-sauvegarde") {
+    if (!confirm(`Restaurer « ${btn.dataset.nom} » ? Toutes les données actuelles seront remplacées (une sauvegarde de l'état présent est prise avant).`)) return;
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) return;
+    if (await safe(() => api.post(`/sauvegardes/${encodeURIComponent(btn.dataset.nom)}/restaurer`, { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; }
     await renderApp(); return;
   }
   if (a === "activer-comp") { setActiveCompetition(Number(btn.dataset.id)); await renderApp(); return; }
@@ -1041,6 +1095,14 @@ appEl.addEventListener("submit", async (e) => {
   } else if (form.id === "form-code-admin") {
     const ok = await safe(() => api.post("/securite/code", { nouveauCode: f.get("nouveauCode"), ancienCode: f.get("ancienCode") || null }));
     if (ok) { securiteCache = await api.get("/securite").catch(() => securiteCache); toast("Code administrateur enregistré."); }
+  } else if (form.id === "form-importer-sauvegarde") {
+    const fichier = f.get("fichier");
+    if (!fichier || !fichier.size) { toast("Sélectionnez un fichier de sauvegarde.", true); await renderApp(); return; }
+    if (!confirm(`Importer « ${fichier.name} » ? Toutes les données actuelles seront remplacées (une sauvegarde de l'état présent est prise avant).`)) { await renderApp(); return; }
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) { await renderApp(); return; }
+    if (code) f.set("code", code);
+    if (await safe(() => apiUpload("/sauvegardes/importer", f))) { setActiveCompetition(null); routeState = {}; timers = {}; toast("Sauvegarde importée."); }
   }
   await renderApp();
 });

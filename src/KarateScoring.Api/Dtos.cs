@@ -65,3 +65,4 @@ public record AuditDto(DateTime Horodatage, string EntiteType, int EntiteId, str
 public record SecuriteStatusDto(bool CodeConfigure);
 public record DefinirCodeRequest(string NouveauCode, string? AncienCode);
 public record ResetRequest(string? Code);
+public record RestaurerRequest(string? Code);

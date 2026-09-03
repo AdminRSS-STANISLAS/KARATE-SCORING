@@ -24,6 +24,7 @@ var dbPath = FkcScoringPaths.ResolveDbPath();
 Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 builder.Services.AddDbContext<FkcScoringContext>(o => o.UseSqlite($"Data Source={dbPath}"));
 builder.Services.AddScoped<AuditService>();
+builder.Services.AddHostedService<KarateScoring.Api.SauvegardeAutomatiqueHostedService>();
 
 var app = builder.Build();
 

@@ -32,6 +32,9 @@ public class KataConfrontation
     public Couleur? VainqueurCouleur { get; set; }
     public StatutCombat Statut { get; set; } = StatutCombat.EnAttente;
 
+    /// <summary>Jeton de concurrence (incrémenté à chaque écriture) : détecte deux postes qui touchent la même confrontation en parallèle.</summary>
+    public int RowVersion { get; set; }
+
     /// <summary>Vrai si cette confrontation n'a pas eu lieu car un des deux compétiteurs était exempté (bye).</summary>
     public bool EstBye { get; set; }
 

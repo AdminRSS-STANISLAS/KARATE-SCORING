@@ -50,13 +50,6 @@ public partial class ExportView : UserControl
             {
                 var tableau = App.Db.Tableaux.Where(t => t.CategorieId == categorie.Id).OrderByDescending(t => t.Id).FirstOrDefault();
                 var classement = tableau != null ? calculator.CalculerEtEnregistrer(tableau.Id) : new List<Classement>();
-                if (classement.Count > 0)
-                {
-                    foreach (var c in classement)
-                    {
-                        c.Participant = c.ParticipantId != null ? App.Db.Participants.Include(p => p.Club).First(p => p.Id == c.ParticipantId) : null;
-                    }
-                }
                 resultatsParCategorie.Add((categorie, classement));
             }
 

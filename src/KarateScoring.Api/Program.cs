@@ -12,12 +12,28 @@ builder.Services.AddControllers().AddJsonOptions(o =>
 });
 builder.Services.AddEndpointsApiExplorer();
 
-var dbPath = Environment.GetEnvironmentVariable("KARATE_SCORING_DB_PATH") ?? "/data/karate-scoring.db";
+var dbPath = FkcScoringPaths.ResolveDbPath();
 Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);
 builder.Services.AddDbContext<FkcScoringContext>(o => o.UseSqlite($"Data Source={dbPath}"));
 builder.Services.AddScoped<AuditService>();
 
 var app = builder.Build();
+
+// Deux postes peuvent toucher le même combat en parallèle (arbitre + poste de contrôle) : le jeton
+// de concurrence (Combat/KataConfrontation.RowVersion) fait échouer le second SaveChanges plutôt que
+// d'écraser silencieusement le premier — on transforme ça en réponse HTTP claire pour le frontend.
+app.Use(async (context, next) =>
+{
+    try
+    {
+        await next();
+    }
+    catch (DbUpdateConcurrencyException)
+    {
+        context.Response.StatusCode = StatusCodes.Status409Conflict;
+        await context.Response.WriteAsJsonAsync(new { detail = "Ces données ont été modifiées par un autre poste entre-temps. Rechargez et réessayez." });
+    }
+});
 
 using (var scope = app.Services.CreateScope())
 {

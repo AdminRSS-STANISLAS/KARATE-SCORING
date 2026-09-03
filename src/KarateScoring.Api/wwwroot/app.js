@@ -41,8 +41,27 @@ async function safe(fn) {
 let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_competition")) || null;
 let currentRoute = "competitions";
 let routeState = {};
-let timers = {}; // chrono transient state keyed by combat id: {remainingMs, running}
+// Chrono par combat : { remainingMs, totalSec, running, runningSince }. remainingMs est le temps
+// restant "figé" au dernier point de contrôle (démarrage/pause/reset/réglage durée) ; pendant que
+// le chrono tourne, le temps réel affiché se calcule à partir de runningSince (horloge murale, voir
+// chronoRemainingMs) plutôt que d'être décrémenté à chaque tick — ça évite toute dérive cumulative
+// en cas d'onglet en arrière-plan ou de machine chargée, et ça permet de reconstituer le temps exact
+// après un rafraîchissement de page puisque runningSince est un horodatage absolu persisté.
+let timers = loadTimers();
 let competitionsCache = [];
+
+function loadTimers() {
+  try { return JSON.parse(localStorage.getItem("karate_scoring_timers")) || {}; }
+  catch (e) { return {}; }
+}
+function saveTimers() {
+  try { localStorage.setItem("karate_scoring_timers", JSON.stringify(timers)); }
+  catch (e) { /* stockage indisponible : le chrono reste fonctionnel pour cet onglet, juste pas persistant */ }
+}
+function chronoRemainingMs(t) {
+  if (!t) return 0;
+  return t.running ? Math.max(0, t.remainingMs - (Date.now() - t.runningSince)) : t.remainingMs;
+}
 
 function setActiveCompetition(id) {
   activeCompetitionId = id;
@@ -504,9 +523,10 @@ async function screenKumite() {
 
 function renderKumiteScoreboard(c, cat, tableauFormat, comp) {
   const enPoule = tableauFormat === "PouleUnique" || (tableauFormat === "PoulePuisElimination" && c.tour === 1);
+  if (c.statut === "Termine" && timers[c.id]) { delete timers[c.id]; saveTimers(); } // plus de chrono actif à conserver une fois le combat clos
   let t = timers[c.id];
-  if (!t && c.statut !== "Termine") t = timers[c.id] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false };
-  const remainingSec = t ? Math.ceil(t.remainingMs / 1000) : 0;
+  if (!t && c.statut !== "Termine") t = timers[c.id] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
+  const remainingSec = t ? Math.ceil(chronoRemainingMs(t) / 1000) : 0;
   const mm = Math.floor(remainingSec / 60), ss = remainingSec % 60;
   const chronoTxt = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 
@@ -572,16 +592,18 @@ function renderKumiteScoreboard(c, cat, tableauFormat, comp) {
 }
 
 /* Boucle de chrono — 100 ms, purement côté client ; le serveur n'apprend le temps écoulé qu'au
-   moment d'une action (point/pénalité/fin de temps) via tempsEcouleSec. */
+   moment d'une action (point/pénalité/fin de temps) via tempsEcouleSec. Le temps restant se calcule
+   à chaque tick à partir de l'horloge murale (chronoRemainingMs), pas d'un décrément cumulé : un
+   tick en retard (onglet en arrière-plan, machine chargée) ne fait donc dériver aucun combat. */
 setInterval(async () => {
   let any = false;
   for (const id of Object.keys(timers)) {
     const t = timers[id];
     if (t.running) {
       any = true;
-      t.remainingMs = Math.max(0, t.remainingMs - 100);
-      if (t.remainingMs <= 0) {
-        t.running = false;
+      if (chronoRemainingMs(t) <= 0) {
+        t.remainingMs = 0; t.running = false; t.runningSince = null;
+        saveTimers();
         await safe(() => api.post(`/combats/${id}/fin-de-temps`, { tempsEcouleSec: t.totalSec }));
         if (currentRoute === "kumite") await renderApp();
       }
@@ -597,9 +619,9 @@ function liveUpdateChrono() {
   if (!t) return;
   const el = document.getElementById("chronoDisplay");
   if (!el) return;
-  const remainingSec = Math.ceil(t.remainingMs / 1000);
+  const remainingSec = Math.ceil(chronoRemainingMs(t) / 1000);
   const mm = Math.floor(remainingSec / 60), ss = remainingSec % 60;
-  el.textContent = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "");
+  el.textContent = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
   el.classList.toggle("low", remainingSec <= 15);
 }
 
@@ -795,15 +817,22 @@ appEl.addEventListener("click", async (e) => {
   if (a === "chrono-start") {
     const comp = activeComp();
     let t = timers[btn.dataset.conf];
-    if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false };
+    if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
     if (!(await safe(() => api.post(`/combats/${btn.dataset.conf}/demarrer`)))) return;
-    t.running = true; await renderApp(); return;
+    t.running = true; t.runningSince = Date.now(); saveTimers();
+    await renderApp(); return;
   }
-  if (a === "chrono-pause") { timers[btn.dataset.conf].running = false; await renderApp(); return; }
+  if (a === "chrono-pause") {
+    const t = timers[btn.dataset.conf];
+    t.remainingMs = chronoRemainingMs(t); t.running = false; t.runningSince = null;
+    saveTimers();
+    await renderApp(); return;
+  }
   if (a === "chrono-reset") {
     const comp = activeComp();
     const totalSec = timers[btn.dataset.conf] ? timers[btn.dataset.conf].totalSec : comp.dureeCombatDefautSec;
-    timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false };
+    timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false, runningSince: null };
+    saveTimers();
     await renderApp(); return;
   }
   if (a === "chrono-duree") {
@@ -813,17 +842,18 @@ appEl.addEventListener("click", async (e) => {
     const nextTotal = Math.max(30, t.totalSec + delta);
     t.remainingMs = Math.max(0, t.remainingMs + (nextTotal - t.totalSec) * 1000);
     t.totalSec = nextTotal;
+    saveTimers();
     await renderApp(); return;
   }
   if (a === "point") {
     const t = timers[btn.dataset.conf];
-    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(t.remainingMs / 1000)) : 0;
+    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(chronoRemainingMs(t) / 1000)) : 0;
     await safe(() => api.post(`/combats/${btn.dataset.conf}/point`, { couleur: btn.dataset.couleur, type: btn.dataset.type, tempsEcouleSec }));
     await renderApp(); return;
   }
   if (a === "penalite") {
     const t = timers[btn.dataset.conf];
-    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(t.remainingMs / 1000)) : 0;
+    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(chronoRemainingMs(t) / 1000)) : 0;
     await safe(() => api.post(`/combats/${btn.dataset.conf}/penalite`, { couleur: btn.dataset.couleur, penalite: btn.dataset.pen, tempsEcouleSec }));
     await renderApp(); return;
   }

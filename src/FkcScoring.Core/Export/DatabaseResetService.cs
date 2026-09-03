@@ -4,8 +4,8 @@ namespace FkcScoring.Core.Export;
 
 /// <summary>
 /// Filet de sécurité pour le bouton "Exporter et réinitialiser" : sauvegarde horodatée du fichier
-/// SQLite avant de vider les données de la compétition en cours, pour repartir sur une base propre
-/// sans jamais perdre la trace de ce qui a été joué.
+/// SQLite avant de vider toutes les données de la plateforme (compétitions, clubs, participants...),
+/// pour repartir sur une base propre sans jamais perdre la trace de ce qui a été joué.
 /// </summary>
 public class DatabaseResetService
 {
@@ -27,7 +27,7 @@ public class DatabaseResetService
         return backupPath;
     }
 
-    /// <summary>Vide toutes les données de compétition (une compétition à la fois, pas d'historique conservé en base).</summary>
+    /// <summary>Vide toutes les données de la plateforme, toutes compétitions confondues.</summary>
     public void ViderCompetition(FkcScoringContext db)
     {
         db.Classements.RemoveRange(db.Classements);

@@ -8,13 +8,28 @@ namespace KarateScoring.Api.Controllers;
 [Route("api/admin")]
 public class AdminController(FkcScoringContext db) : ControllerBase
 {
-    /// <summary>Vide toutes les données (cahier : filet de sécurité "exporter puis réinitialiser") — à utiliser depuis l'écran d'administration, après export.</summary>
+    /// <summary>
+    /// Vide toutes les données de la plateforme (toutes compétitions confondues), après avoir sauvegardé
+    /// une copie horodatée du fichier SQLite. Si la sauvegarde échoue, la base n'est pas touchée.
+    /// </summary>
     [HttpPost("reset")]
     public IActionResult Reset()
     {
-        var dbPath = Environment.GetEnvironmentVariable("KARATE_SCORING_DB_PATH") ?? "/data/karate-scoring.db";
-        var backupDir = Path.Combine(Path.GetDirectoryName(dbPath) ?? "/data", "backups");
-        new DatabaseResetService(dbPath, backupDir).ViderCompetition(db);
-        return NoContent();
+        var dbPath = FkcScoringPaths.ResolveDbPath();
+        var backupDir = FkcScoringPaths.ResolveBackupDir(dbPath);
+        var resetService = new DatabaseResetService(dbPath, backupDir);
+
+        string backupPath;
+        try
+        {
+            backupPath = resetService.SauvegarderBaseVersFichier();
+        }
+        catch (Exception ex)
+        {
+            return Problem($"Sauvegarde impossible, la base n'a pas été modifiée : {ex.Message}", statusCode: StatusCodes.Status500InternalServerError);
+        }
+
+        resetService.ViderCompetition(db);
+        return Ok(new { backupPath });
     }
 }

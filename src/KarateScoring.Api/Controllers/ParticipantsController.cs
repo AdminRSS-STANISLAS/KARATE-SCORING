@@ -20,7 +20,9 @@ public class ParticipantsController(FkcScoringContext db) : ControllerBase
         if (string.IsNullOrWhiteSpace(req.Club)) return BadRequest("Le club est requis.");
 
         var clubNom = req.Club.Trim();
-        var club = await db.Clubs.FirstOrDefaultAsync(c => c.Nom.ToLower() == clubNom.ToLower());
+        // Comparaison faite côté .NET (pas traduite en SQL) : ToLower() d'EF Core sur SQLite ne
+        // gère correctement que l'ASCII, "Étoile" et "ÉTOILE" ne seraient pas reconnus identiques.
+        var club = (await db.Clubs.ToListAsync()).FirstOrDefault(c => string.Equals(c.Nom, clubNom, StringComparison.OrdinalIgnoreCase));
         if (club == null) { club = new Club { Nom = clubNom }; db.Clubs.Add(club); await db.SaveChangesAsync(); }
 
         var participant = new Participant

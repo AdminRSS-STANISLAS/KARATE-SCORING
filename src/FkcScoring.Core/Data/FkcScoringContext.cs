@@ -39,7 +39,33 @@ public class FkcScoringContext : DbContext
             .HasForeignKey(c => c.ProchainConfrontationId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Jeton de concurrence : détecte deux postes qui écrivent sur le même combat/confrontation
+        // en parallèle (ex. arbitre + poste de contrôle sur le même tatami).
+        modelBuilder.Entity<Combat>().Property(c => c.RowVersion).IsConcurrencyToken();
+        modelBuilder.Entity<KataConfrontation>().Property(c => c.RowVersion).IsConcurrencyToken();
+
         modelBuilder.Entity<Kata>().HasData(SeedKatas());
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        IncrementerVersionsDeConcurrence();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        IncrementerVersionsDeConcurrence();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>Incrémente RowVersion sur chaque Combat/KataConfrontation modifié, pour que le jeton de concurrence change à chaque écriture.</summary>
+    private void IncrementerVersionsDeConcurrence()
+    {
+        foreach (var entry in ChangeTracker.Entries<Combat>())
+            if (entry.State == EntityState.Modified) entry.Entity.RowVersion++;
+        foreach (var entry in ChangeTracker.Entries<KataConfrontation>())
+            if (entry.State == EntityState.Modified) entry.Entity.RowVersion++;
     }
 
     private static Kata[] SeedKatas()

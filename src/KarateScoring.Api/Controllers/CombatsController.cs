@@ -59,7 +59,8 @@ public class CombatsController(FkcScoringContext db, AuditService audit) : Contr
 
         // Le chronomètre vit côté client (pas de chrono serveur) ; le temps écoulé transmis par
         // l'arbitre au moment de l'action alimente l'historique horodaté (cahier 5.4).
-        CombatEngine.AjouterPoint(combat, couleur, points, TimeSpan.FromSeconds(Math.Max(0, req.TempsEcouleSec)));
+        try { CombatEngine.AjouterPoint(combat, couleur, points, TimeSpan.FromSeconds(Math.Max(0, req.TempsEcouleSec))); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
 
         var termine = CombatEngine.VerifierEcartVictoire(combat, competition.EcartVictoire);
         await db.SaveChangesAsync();
@@ -80,7 +81,8 @@ public class CombatsController(FkcScoringContext db, AuditService audit) : Contr
         if (!Enum.TryParse<Couleur>(req.Couleur, true, out var couleur)) return BadRequest("Couleur invalide.");
         if (!Enum.TryParse<TypePenalite>(req.Penalite, true, out var penalite)) return BadRequest("Pénalité invalide.");
 
-        CombatEngine.AppliquerPenalite(combat, couleur, penalite, TimeSpan.FromSeconds(Math.Max(0, req.TempsEcouleSec)));
+        try { CombatEngine.AppliquerPenalite(combat, couleur, penalite, TimeSpan.FromSeconds(Math.Max(0, req.TempsEcouleSec))); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         await db.SaveChangesAsync();
         audit.Consigner("Combat", id, $"Pénalité {req.Penalite} {req.Couleur}");
 
@@ -124,7 +126,8 @@ public class CombatsController(FkcScoringContext db, AuditService audit) : Contr
         if (combat == null) return NotFound();
         if (!Enum.TryParse<Couleur>(req.Couleur, true, out var couleur)) return BadRequest("Couleur invalide.");
 
-        CombatEngine.EnregistrerHantei(combat, couleur);
+        try { CombatEngine.EnregistrerHantei(combat, couleur); }
+        catch (InvalidOperationException ex) { return BadRequest(ex.Message); }
         await db.SaveChangesAsync();
         new TableauService(db).EnregistrerResultatCombat(combat);
         audit.Consigner("Combat", id, "Terminé (Hantei)", null, req.Couleur);

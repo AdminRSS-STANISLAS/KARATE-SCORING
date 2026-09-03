@@ -22,6 +22,9 @@ public class Combat
     public int? DureeReelleSec { get; set; }
     public StatutCombat Statut { get; set; } = StatutCombat.EnAttente;
 
+    /// <summary>Jeton de concurrence (incrémenté à chaque écriture) : détecte deux postes qui touchent le même combat en parallèle.</summary>
+    public int RowVersion { get; set; }
+
     /// <summary>Vrai si ce combat n'a pas été disputé car un des deux compétiteurs était exempté (bye).</summary>
     public bool EstBye { get; set; }
 

@@ -18,6 +18,7 @@ builder.Services.AddControllers().AddJsonOptions(o =>
     o.JsonSerializerOptions.Converters.Add(new System.Text.Json.Serialization.JsonStringEnumConverter());
 });
 builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddHttpContextAccessor();
 
 var dbPath = FkcScoringPaths.ResolveDbPath();
 Directory.CreateDirectory(Path.GetDirectoryName(dbPath)!);

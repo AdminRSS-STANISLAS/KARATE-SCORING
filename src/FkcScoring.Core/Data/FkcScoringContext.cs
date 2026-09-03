@@ -23,6 +23,7 @@ public class FkcScoringContext : DbContext
     public DbSet<VoteJuge> VotesJuges => Set<VoteJuge>();
     public DbSet<Classement> Classements => Set<Classement>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Parametres> Parametres => Set<Parametres>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -131,7 +131,7 @@ main > *{position:relative; z-index:1;}
 
 label{display:block; font-size:11.5px; font-weight:600; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:5px;}
 .field{margin-bottom:12px;}
-input[type=text],input[type=number],input[type=date],select,textarea{
+input[type=text],input[type=number],input[type=date],input[type=password],select,textarea{
   width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:var(--radius-sm);
   background:var(--paper); color:var(--ink);
 }

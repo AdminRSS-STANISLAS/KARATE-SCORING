@@ -1,5 +1,6 @@
 using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using Microsoft.AspNetCore.Http;
 
 namespace FkcScoring.Core.Domain;
 
@@ -7,9 +8,19 @@ namespace FkcScoring.Core.Domain;
 public class AuditService
 {
     private readonly FkcScoringContext _db;
+    private readonly IHttpContextAccessor _httpContextAccessor;
 
-    public AuditService(FkcScoringContext db) => _db = db;
+    public AuditService(FkcScoringContext db, IHttpContextAccessor httpContextAccessor)
+    {
+        _db = db;
+        _httpContextAccessor = httpContextAccessor;
+    }
 
+    /// <summary>
+    /// <paramref name="utilisateur"/> non fourni : retombe sur l'en-tête X-Operateur de la requête en
+    /// cours (nom d'opérateur saisi une fois par appareil côté frontend) — évite de faire passer ce
+    /// paramètre à chacun des appels existants dans les contrôleurs.
+    /// </summary>
     public void Consigner(string entiteType, int entiteId, string action, string? ancienneValeur = null, string? nouvelleValeur = null, string? utilisateur = null)
     {
         _db.AuditLogs.Add(new AuditLog
@@ -19,9 +30,15 @@ public class AuditService
             Action = action,
             AncienneValeur = ancienneValeur,
             NouvelleValeur = nouvelleValeur,
-            Utilisateur = utilisateur,
+            Utilisateur = utilisateur ?? OperateurCourant(),
             Horodatage = DateTime.Now
         });
         _db.SaveChanges();
+    }
+
+    private string? OperateurCourant()
+    {
+        var valeur = _httpContextAccessor.HttpContext?.Request.Headers["X-Operateur"].ToString();
+        return string.IsNullOrWhiteSpace(valeur) ? null : valeur;
     }
 }

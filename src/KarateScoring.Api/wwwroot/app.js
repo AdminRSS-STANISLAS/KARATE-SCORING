@@ -10,9 +10,11 @@ const DISQUALIFIANTES = ["Hansoku", "Shikkaku", "Kiken"];
 
 /* ================= API ================= */
 async function apiFetch(method, path, body) {
+  const headers = body !== undefined ? { "Content-Type": "application/json" } : {};
+  if (operateurNom) headers["X-Operateur"] = operateurNom;
   const res = await fetch("/api" + path, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (res.status === 204) return null;
@@ -39,6 +41,7 @@ async function safe(fn) {
 
 /* ================= State ================= */
 let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_competition")) || null;
+let operateurNom = localStorage.getItem("karate_scoring_operateur") || "";
 let currentRoute = "competitions";
 let routeState = {};
 // Chrono par combat : { remainingMs, totalSec, running, runningSince }. remainingMs est le temps
@@ -50,6 +53,7 @@ let routeState = {};
 let timers = loadTimers();
 let competitionsCache = [];
 let networkInfoCache = null;
+let securiteCache = null;
 let sidebarOpen = false;
 
 function loadTimers() {
@@ -176,12 +180,14 @@ const NAV = [
   { sec: "Bilan" },
   { id: "resultats", label: "Résultats & exports", ico: "▦", kanji: "賞" },
   { id: "audit", label: "Journal d'audit", ico: "≣", kanji: "記録" },
+  { id: "securite", label: "Sécurité", ico: "⛨", kanji: "安全" },
 ];
 
 async function renderApp() {
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
+  securiteCache = await api.get("/securite").catch(() => securiteCache);
 
   const app = document.getElementById("app");
   const comp = activeComp();
@@ -236,6 +242,7 @@ async function renderScreen() {
     case "kata": return activeComp() ? await screenKata() : screenGuardNoComp();
     case "resultats": return activeComp() ? await screenResultats() : screenGuardNoComp();
     case "audit": return await screenAudit();
+    case "securite": return await screenSecurite();
     default: return await screenCompetitions();
   }
 }
@@ -782,10 +789,36 @@ async function screenResultats() {
 /* ---- Audit ---- */
 async function screenAudit() {
   const logs = await api.get("/audit");
-  const rows = logs.map((a) => `<tr><td class="num" style="white-space:nowrap;color:var(--ink-soft);">${new Date(a.horodatage).toLocaleString("fr-FR")}</td><td>${esc(a.entiteType)} #${a.entiteId} — ${esc(a.action)}${a.nouvelleValeur ? " : " + esc(a.nouvelleValeur) : ""}</td></tr>`).join("");
+  const rows = logs.map((a) => `<tr><td class="num" style="white-space:nowrap;color:var(--ink-soft);">${new Date(a.horodatage).toLocaleString("fr-FR")}</td><td>${esc(a.entiteType)} #${a.entiteId} — ${esc(a.action)}${a.nouvelleValeur ? " : " + esc(a.nouvelleValeur) : ""}</td><td>${esc(a.utilisateur || "—")}</td></tr>`).join("");
   return `<div class="topbar"><div><div class="crumb">Traçabilité</div><h1>Journal d'audit</h1></div></div>
   <div class="card"><h3>Modifications de score et décisions <span class="muted">${logs.length} entrées</span></h3>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Horodatage</th><th>Événement</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun événement enregistré.</p>'}
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Horodatage</th><th>Événement</th><th>Opérateur</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun événement enregistré.</p>'}
+  </div>`;
+}
+
+/* ---- Sécurité ---- */
+async function screenSecurite() {
+  const configure = !!(securiteCache && securiteCache.codeConfigure);
+  return `<div class="topbar"><div><div class="crumb">Plateforme</div><h1>Sécurité</h1></div></div>
+
+  <div class="card"><h3>Nom d'opérateur (ce poste)</h3>
+    <p class="hint" style="margin-bottom:10px;">Enregistré dans le journal d'audit pour chaque action effectuée depuis cet appareil.</p>
+    <form id="form-operateur" class="row-inline">
+      <div class="field" style="flex:1;margin-bottom:0;"><input type="text" name="nom" placeholder="Ex. Jean" value="${esc(operateurNom)}"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Enregistrer</button>
+    </form>
+  </div>
+
+  <div class="card"><h3>Code administrateur</h3>
+    ${configure
+      ? '<p class="hint" style="margin-bottom:10px;">Un code est configuré : il sera demandé pour réinitialiser toutes les données de la plateforme.</p>'
+      : '<p class="error" style="margin-bottom:10px;">Aucun code configuré — n\'importe quel poste sur le réseau local peut actuellement réinitialiser toutes les données. Configurez-en un ci-dessous.</p>'}
+    <form id="form-code-admin" class="grid grid-3">
+      ${configure ? field("Code actuel", "ancienCode", "password", "", true) : ""}
+      ${field(configure ? "Nouveau code" : "Code (min. 4 caractères)", "nouveauCode", "password", "", true)}
+      <div></div>
+      <div style="grid-column:1/-1"><button class="btn btn-primary btn-sm" type="submit">${configure ? "Changer le code" : "Configurer le code"}</button></div>
+    </form>
   </div>`;
 }
 
@@ -854,7 +887,12 @@ appEl.addEventListener("click", async (e) => {
   if (a === "seed-demo") { await safe(seedDemo); return; }
   if (a === "reset-all") {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;
-    if (await safe(() => api.post("/admin/reset"))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    let code = null;
+    if (securiteCache && securiteCache.codeConfigure) {
+      code = prompt("Code administrateur requis pour réinitialiser :");
+      if (code == null) return;
+    }
+    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
     await renderApp(); return;
   }
   if (a === "activer-comp") { setActiveCompetition(Number(btn.dataset.id)); await renderApp(); return; }
@@ -996,6 +1034,13 @@ appEl.addEventListener("submit", async (e) => {
   } else if (form.id === "form-aire") {
     const v = (f.get("nom") || "").trim();
     if (v) await safe(() => api.post(`/competitions/${form.dataset.comp}/aires`, { nom: v }));
+  } else if (form.id === "form-operateur") {
+    operateurNom = (f.get("nom") || "").trim();
+    localStorage.setItem("karate_scoring_operateur", operateurNom);
+    toast("Nom d'opérateur enregistré.");
+  } else if (form.id === "form-code-admin") {
+    const ok = await safe(() => api.post("/securite/code", { nouveauCode: f.get("nouveauCode"), ancienCode: f.get("ancienCode") || null }));
+    if (ok) { securiteCache = await api.get("/securite").catch(() => securiteCache); toast("Code administrateur enregistré."); }
   }
   await renderApp();
 });

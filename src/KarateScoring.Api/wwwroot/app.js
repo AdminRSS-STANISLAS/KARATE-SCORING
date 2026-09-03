@@ -50,6 +50,7 @@ let routeState = {};
 let timers = loadTimers();
 let competitionsCache = [];
 let networkInfoCache = null;
+let sidebarOpen = false;
 
 function loadTimers() {
   try { return JSON.parse(localStorage.getItem("karate_scoring_timers")) || {}; }
@@ -183,7 +184,13 @@ async function renderApp() {
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
 
   const app = document.getElementById("app");
-  app.innerHTML = renderSidebar() + '<main><div id="screenRoot"><div class="spinner-line">Chargement…</div></div></main>';
+  const comp = activeComp();
+  const mobileTopbar = `<div class="mobile-topbar">
+    <button class="hamburger" type="button" data-action="toggle-sidebar" aria-label="Menu">☰</button>
+    <span class="mt-comp">${comp ? esc(comp.nom) : "Karate Scoring"}</span>
+  </div>`;
+  app.innerHTML = mobileTopbar + renderSidebar() + `<div class="sidebar-backdrop${sidebarOpen ? " open" : ""}" data-action="close-sidebar"></div>` +
+    '<main><div id="screenRoot"><div class="spinner-line">Chargement…</div></div></main>';
 
   let html;
   try { html = await renderScreen(); }
@@ -198,7 +205,7 @@ function renderSidebar() {
     : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
   ).join("");
   return `
-  <nav class="sidebar">
+  <nav class="sidebar${sidebarOpen ? " open" : ""}">
     <div class="sidebar-brand"><div class="logo-badge"><img class="brand-logo" src="assets/karate-scoring-logo.jpg" alt="Karate Scoring"></div><div class="sub">Plateforme locale</div></div>
     <div class="sidebar-comp">Compétition active${comp ? `<b>${esc(comp.nom)}</b>` : '<b style="color:var(--sidebar-ink-dim);font-weight:500;">Aucune sélectionnée</b>'}</div>
     <ul class="nav">${navHtml}</ul>
@@ -835,13 +842,15 @@ const appEl = document.getElementById("app");
 
 appEl.addEventListener("click", async (e) => {
   const navEl = e.target.closest("[data-nav]");
-  if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; await renderApp(); return; }
+  if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; sidebarOpen = false; await renderApp(); return; }
 
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   e.preventDefault();
   const a = btn.dataset.action;
 
+  if (a === "toggle-sidebar") { sidebarOpen = !sidebarOpen; await renderApp(); return; }
+  if (a === "close-sidebar") { sidebarOpen = false; await renderApp(); return; }
   if (a === "seed-demo") { await safe(seedDemo); return; }
   if (a === "reset-all") {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;

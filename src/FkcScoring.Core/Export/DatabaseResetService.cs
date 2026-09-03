@@ -36,6 +36,7 @@ public class DatabaseResetService
         db.EvenementsCombat.RemoveRange(db.EvenementsCombat);
         db.Combats.RemoveRange(db.Combats);
         db.Tableaux.RemoveRange(db.Tableaux);
+        db.Aires.RemoveRange(db.Aires);
         db.EquipeMembres.RemoveRange(db.EquipeMembres);
         db.Inscriptions.RemoveRange(db.Inscriptions);
         db.Equipes.RemoveRange(db.Equipes);

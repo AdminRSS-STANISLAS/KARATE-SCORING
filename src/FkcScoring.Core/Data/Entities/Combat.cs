@@ -6,7 +6,6 @@ public class Combat
     public int TableauId { get; set; }
     public Tableau? Tableau { get; set; }
     public int Tour { get; set; }
-    public string? Aire { get; set; }
 
     public int? CompetiteurAkaId { get; set; }
     public Participant? CompetiteurAka { get; set; }

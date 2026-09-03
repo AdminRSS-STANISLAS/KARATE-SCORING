@@ -56,6 +56,8 @@ public static class Mapping
             c.Votes.Select(v => new VoteDto(v.JugeNumero, v.VoteCouleur.ToString())).ToList());
     }
 
+    public static AireDto ToDto(this Aire a) => new(a.Id, a.Nom, a.Ordre);
+
     public static ClassementDto ToDto(this Classement c) => new(
         c.Position, c.Medaille?.ToString(),
         c.Participant?.NomComplet ?? c.Equipe?.Nom ?? "—",

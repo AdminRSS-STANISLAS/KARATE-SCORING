@@ -49,6 +49,7 @@ let routeState = {};
 // après un rafraîchissement de page puisque runningSince est un horodatage absolu persisté.
 let timers = loadTimers();
 let competitionsCache = [];
+let networkInfoCache = null;
 
 function loadTimers() {
   try { return JSON.parse(localStorage.getItem("karate_scoring_timers")) || {}; }
@@ -168,6 +169,7 @@ const NAV = [
   { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組" },
   { sec: "Compétition" },
   { id: "tableaux", label: "Tableaux", ico: "⑂", kanji: "表" },
+  { id: "tatamis", label: "Tatamis", ico: "▣", kanji: "畳" },
   { id: "kumite", label: "Arbitrage Kumite", ico: "⚑", kanji: "組手" },
   { id: "kata", label: "Jury Kata", ico: "⚐", kanji: "型" },
   { sec: "Bilan" },
@@ -178,6 +180,7 @@ const NAV = [
 async function renderApp() {
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
+  if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
 
   const app = document.getElementById("app");
   app.innerHTML = renderSidebar() + '<main><div id="screenRoot"><div class="spinner-line">Chargement…</div></div></main>';
@@ -201,6 +204,7 @@ function renderSidebar() {
     <ul class="nav">${navHtml}</ul>
     <div class="sidebar-partner"><img src="assets/fkc-logo.jpg" alt="Fouda Karate Club"><div class="ptxt">Partenaire fondateur<b>Fouda Karate Club</b></div></div>
     <div class="sidebar-foot">Application autonome, exécutée localement (Docker) — toutes les données restent sur ce poste.
+      ${networkInfoCache && networkInfoCache.addresses.length ? `<div class="hint" style="margin:6px 0;">Postes tatami — ouvrir : ${networkInfoCache.addresses.map((a) => `<code>http://${a}:${networkInfoCache.port}</code>`).join(", ")}</div>` : ""}
       <button data-action="seed-demo" type="button">Charger la démo</button>
       <button data-action="reset-all" type="button">Réinitialiser tout</button>
     </div>
@@ -220,6 +224,7 @@ async function renderScreen() {
     case "participants": return activeComp() ? await screenParticipants() : screenGuardNoComp();
     case "equipes": return activeComp() ? await screenEquipes() : screenGuardNoComp();
     case "tableaux": return activeComp() ? await screenTableaux() : screenGuardNoComp();
+    case "tatamis": return activeComp() ? await screenTatamis() : screenGuardNoComp();
     case "kumite": return activeComp() ? await screenKumite() : screenGuardNoComp();
     case "kata": return activeComp() ? await screenKata() : screenGuardNoComp();
     case "resultats": return activeComp() ? await screenResultats() : screenGuardNoComp();
@@ -420,15 +425,19 @@ async function screenTableaux() {
         ${cat.inscritsCount < 2 ? '<p class="hint">Il faut au moins 2 inscrits.</p>' : ""}
       </div>`;
     } else {
-      body = renderTableauBody(tableau, cat);
+      const aires = await api.get(`/competitions/${comp.id}/aires`);
+      body = renderTableauBody(tableau, cat, aires);
     }
   }
 
   return `<div class="topbar"><div><div class="crumb">${esc(comp.nom)}</div><h1>Tableaux de compétition</h1></div><select id="select-tableau-cat">${opts}</select></div>${body}`;
 }
 
-function renderTableauBody(tableau, cat) {
-  let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span><button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
+function renderTableauBody(tableau, cat, aires) {
+  const aireOpts = `<option value="">Aucune aire</option>` + (aires || []).map((a) => `<option value="${a.id}" ${tableau.aireId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("");
+  let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span>
+    <select data-action="assign-aire" data-tab="${tableau.id}" style="margin-left:10px;font-size:12px;">${aireOpts}</select>
+    <button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
 
   if (tableau.format === "PouleUnique") {
     html += renderPouleTable(tableau.confrontations, null);
@@ -493,6 +502,54 @@ function matchCard(c) {
   const body = slot(c.aNom, c.aId, "aka", c.scoreAka, winA) + slot(c.bNom, c.bId, "ao", c.scoreAo, winB);
   const clickable = (c.aId != null && c.bId != null && !c.estBye) ? ` data-action="goto-confrontation" data-id="${c.id}" data-type="${c.type}"` : "";
   return `<div class="match-card"${clickable}>${body}</div>`;
+}
+
+/* ---- Tatamis ---- */
+async function screenTatamis() {
+  const comp = activeComp();
+  const aires = await api.get(`/competitions/${comp.id}/aires`);
+  const selId = routeState.tatamiAireId || (aires[0] && aires[0].id);
+
+  const rows = aires.map((a) => `<tr>
+    <td><input type="text" class="aire-nom-input" data-id="${a.id}" value="${esc(a.nom)}" style="width:100%;"></td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-sm" data-action="save-aire-nom" data-id="${a.id}">Enregistrer</button>
+      <button class="btn btn-sm ${a.id === selId ? "btn-primary" : "btn-ghost"}" data-action="select-tatami" data-id="${a.id}">File d'attente</button>
+      <button class="btn btn-sm btn-ghost" data-action="del-aire" data-id="${a.id}">Supprimer</button>
+    </td></tr>`).join("");
+
+  let html = `<div class="topbar"><div><div class="crumb">${esc(comp.nom)}</div><h1>Tatamis</h1></div></div>
+  <div class="card"><h3>Nouvelle aire</h3>
+    <form id="form-aire" data-comp="${comp.id}" class="row-inline">
+      <div class="field" style="flex:1;margin-bottom:0;"><input type="text" name="nom" placeholder="Ex. Tatami 1" required></div>
+      <button class="btn btn-primary btn-sm" type="submit">Ajouter</button>
+    </form>
+  </div>
+  <div class="card"><h3>Aires <span class="muted">${aires.length}</span></h3>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Créez une aire pour répartir les tableaux entre plusieurs tatamis, puis assignez-les depuis l\'écran Tableaux.</p>'}
+  </div>`;
+
+  const selAire = aires.find((a) => a.id === selId);
+  if (selAire) html += await renderFileAttente(selAire);
+  return html;
+}
+
+async function renderFileAttente(aire) {
+  const fa = await api.get(`/aires/${aire.id}/file-attente`);
+  function row(entry, label, primary) {
+    if (!entry) return `<tr><td>${label}</td><td class="empty">—</td><td></td></tr>`;
+    const c = entry.confrontation;
+    return `<tr><td>${label}</td><td>${esc(entry.categorieNom)} <span class="hint">(${c.type === "kumite" ? "Kumite" : "Kata"})</span><br>${esc(c.aNom)} <span class="vs">vs</span> ${esc(c.bNom)}</td>
+      <td>${badgeStatut(c.statut)} <button class="btn btn-sm ${primary ? "btn-primary" : ""}" data-action="goto-confrontation" data-id="${c.id}" data-type="${c.type}">${c.type === "kumite" ? "Arbitrer" : "Juger"}</button></td></tr>`;
+  }
+  const aVenirRows = fa.aVenir.map((e) => row(e, "À venir")).join("");
+  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}</h3>
+    <div class="table-wrap"><table><thead><tr><th>Statut</th><th>Rencontre</th><th></th></tr></thead><tbody>
+      ${row(fa.enCours, "En cours", true)}
+      ${row(fa.suivant, "Suivant")}
+      ${aVenirRows}
+    </tbody></table></div>
+  </div>`;
 }
 
 /* ---- Arbitrage Kumite ---- */
@@ -808,6 +865,17 @@ appEl.addEventListener("click", async (e) => {
     await safe(() => api.del(`/tableaux/${btn.dataset.tab}`)); await renderApp(); return;
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
+  if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
+  if (a === "save-aire-nom") {
+    const input = document.querySelector(`.aire-nom-input[data-id="${btn.dataset.id}"]`);
+    await safe(() => api.put(`/aires/${btn.dataset.id}`, { nom: input.value }));
+    await renderApp(); return;
+  }
+  if (a === "del-aire") {
+    if (!confirm("Supprimer cette aire ? Les tableaux qui y sont assignés seront désassignés.")) return;
+    if (await safe(() => api.del(`/aires/${btn.dataset.id}`)) && routeState.tatamiAireId === Number(btn.dataset.id)) routeState.tatamiAireId = null;
+    await renderApp(); return;
+  }
   if (a === "goto-confrontation") {
     if (btn.dataset.type === "kumite") { routeState.kumiteConfId = Number(btn.dataset.id); currentRoute = "kumite"; }
     else { routeState.kataConfId = Number(btn.dataset.id); currentRoute = "kata"; }
@@ -870,6 +938,10 @@ appEl.addEventListener("click", async (e) => {
 
 appEl.addEventListener("change", async (e) => {
   if (e.target.id === "select-tableau-cat") { routeState.tableauCatId = Number(e.target.value); await renderApp(); return; }
+  if (e.target.dataset.action === "assign-aire") {
+    await safe(() => api.post(`/tableaux/${e.target.dataset.tab}/aire`, { aireId: e.target.value ? Number(e.target.value) : null }));
+    await renderApp(); return;
+  }
   if (e.target.dataset.action === "set-kata") {
     const kataId = Number(e.target.value);
     if (!kataId) return;
@@ -912,6 +984,9 @@ appEl.addEventListener("submit", async (e) => {
     await safe(() => api.post(`/competitions/${form.dataset.comp}/equipes`, { nom: f.get("nom"), club: f.get("club"), membreIds, categorieId: f.get("categorieId") ? Number(f.get("categorieId")) : null }));
   } else if (form.id === "form-gen-tableau") {
     await safe(() => api.post(`/categories/${form.dataset.cat}/tableau/generer`, { formatForce: f.get("force") || null }));
+  } else if (form.id === "form-aire") {
+    const v = (f.get("nom") || "").trim();
+    if (v) await safe(() => api.post(`/competitions/${form.dataset.comp}/aires`, { nom: v }));
   }
   await renderApp();
 });

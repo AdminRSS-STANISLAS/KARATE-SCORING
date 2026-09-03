@@ -15,6 +15,7 @@ public class FkcScoringContext : DbContext
     public DbSet<Equipe> Equipes => Set<Equipe>();
     public DbSet<EquipeMembre> EquipeMembres => Set<EquipeMembre>();
     public DbSet<Tableau> Tableaux => Set<Tableau>();
+    public DbSet<Aire> Aires => Set<Aire>();
     public DbSet<Combat> Combats => Set<Combat>();
     public DbSet<EvenementCombat> EvenementsCombat => Set<EvenementCombat>();
     public DbSet<Kata> Katas => Set<Kata>();
@@ -38,6 +39,13 @@ public class FkcScoringContext : DbContext
             .WithMany()
             .HasForeignKey(c => c.ProchainConfrontationId)
             .OnDelete(DeleteBehavior.Restrict);
+
+        // Supprimer une aire ne doit pas supprimer les tableaux qui y étaient affectés — juste les désassigner.
+        modelBuilder.Entity<Tableau>()
+            .HasOne(t => t.Aire)
+            .WithMany()
+            .HasForeignKey(t => t.AireId)
+            .OnDelete(DeleteBehavior.SetNull);
 
         // Jeton de concurrence : détecte deux postes qui écrivent sur le même combat/confrontation
         // en parallèle (ex. arbitre + poste de contrôle sur le même tatami).

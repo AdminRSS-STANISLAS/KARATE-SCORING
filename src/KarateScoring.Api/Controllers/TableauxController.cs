@@ -128,6 +128,26 @@ public class TableauxController(FkcScoringContext db, AuditService audit) : Cont
                 .ToListAsync();
             confrontations = confs.OrderBy(c => c.EstRepechage).ThenBy(c => c.Tour).Select(c => c.ToDto(categorie.Discipline)).ToList();
         }
-        return new TableauDto(tableau.Id, tableau.CategorieId, tableau.Format.ToString(), confrontations);
+        var aireNom = tableau.AireId != null ? (await db.Aires.FindAsync(tableau.AireId.Value))?.Nom : null;
+        return new TableauDto(tableau.Id, tableau.CategorieId, tableau.Format.ToString(), confrontations, tableau.AireId, aireNom);
+    }
+
+    [HttpPost("tableaux/{tableauId}/aire")]
+    public async Task<ActionResult<TableauDto>> AssignerAire(int tableauId, AssignerAireRequest req)
+    {
+        var tableau = await db.Tableaux.FindAsync(tableauId);
+        if (tableau == null) return NotFound();
+        var categorie = await db.Categories.FindAsync(tableau.CategorieId);
+        if (categorie == null) return NotFound();
+
+        if (req.AireId != null && !await db.Aires.AnyAsync(a => a.Id == req.AireId))
+            return BadRequest("Aire introuvable.");
+
+        var ancienneAireNom = tableau.AireId != null ? (await db.Aires.FindAsync(tableau.AireId.Value))?.Nom : null;
+        var nouvelleAireNom = req.AireId != null ? (await db.Aires.FindAsync(req.AireId.Value))?.Nom : null;
+        tableau.AireId = req.AireId;
+        await db.SaveChangesAsync();
+        audit.Consigner("Tableau", tableauId, "Aire assignée", ancienneAireNom, nouvelleAireNom);
+        return Ok(await BuildDto(tableau, categorie));
     }
 }

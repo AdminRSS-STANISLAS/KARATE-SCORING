@@ -4,6 +4,13 @@ using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Écoute sur toutes les interfaces (pas juste localhost) pour que les postes de scoring des autres
+// tatamis, sur le même réseau Wi-Fi/Ethernet local, puissent atteindre ce poste central — aucune
+// connexion internet requise. Si ASPNETCORE_URLS est déjà défini (mécanisme standard ASP.NET Core),
+// on le laisse prévaloir plutôt que d'imposer notre propre valeur par-dessus.
+if (Environment.GetEnvironmentVariable("ASPNETCORE_URLS") == null)
+    builder.WebHost.UseUrls(FkcScoring.Core.Data.NetworkConfig.ResolveUrls());
+
 builder.Services.AddControllers().AddJsonOptions(o =>
 {
     o.JsonSerializerOptions.PropertyNamingPolicy = System.Text.Json.JsonNamingPolicy.CamelCase;

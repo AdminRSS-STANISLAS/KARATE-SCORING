@@ -37,9 +37,19 @@ public record ConfrontationDto(
     List<EvenementDto>? Evenements,
     string? Kata1Nom, string? Kata2Nom, int? NbJuges, List<VoteDto>? Votes);
 
-public record TableauDto(int Id, int CategorieId, string Format, List<ConfrontationDto> Confrontations);
+public record TableauDto(int Id, int CategorieId, string Format, List<ConfrontationDto> Confrontations, int? AireId, string? AireNom);
 
 public record GenererTableauRequest(string? FormatForce);
+
+public record AireDto(int Id, string Nom, int Ordre);
+public record CreateAireRequest(string Nom);
+public record RenameAireRequest(string Nom);
+public record AssignerAireRequest(int? AireId);
+
+public record FileAttenteEntryDto(string CategorieNom, ConfrontationDto Confrontation);
+public record FileAttenteDto(FileAttenteEntryDto? EnCours, FileAttenteEntryDto? Suivant, List<FileAttenteEntryDto> AVenir);
+
+public record NetworkInfoDto(int Port, List<string> Addresses);
 
 public record PointRequest(string Couleur, string Type, int TempsEcouleSec);
 public record PenaliteRequest(string Couleur, string Penalite, int TempsEcouleSec);

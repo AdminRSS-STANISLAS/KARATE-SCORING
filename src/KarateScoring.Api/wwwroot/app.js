@@ -519,7 +519,7 @@ function renderPouleTable(confs, label) {
       ? (c.type === "kumite"
         ? `${esc(c.aNom)} <span class="tag tag-aka">${c.scoreAka}</span> — <span class="tag tag-ao">${c.scoreAo}</span> ${esc(c.bNom)}`
         : `${esc(c.aNom)} <span class="tag tag-aka">${(c.votes || []).filter((v) => v.couleur === "Aka").length}</span> — <span class="tag tag-ao">${(c.votes || []).filter((v) => v.couleur === "Ao").length}</span> ${esc(c.bNom)}`)
-      : '<span class="tag tag-attente">à jouer</span>';
+      : '<span class="tag tag-attente">à arbitrer</span>';
     return `<tr><td>${esc(c.aNom)} <span class="vs">vs</span> ${esc(c.bNom)}</td><td>${statut}</td></tr>`;
   }).join("");
   const classRows = classement.map((r, i) => { const { nom } = nomDeId(confs, r.id); return `<tr><td>${i + 1}</td><td>${esc(nom)}</td><td>${r.victoires}</td><td>${r.diff}</td></tr>`; }).join("");

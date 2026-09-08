@@ -58,6 +58,19 @@ let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_com
 let operateurNom = localStorage.getItem("karate_scoring_operateur") || "";
 let currentRoute = "competitions";
 let routeState = {};
+
+/* Lien direct par tatami (#tatami/<aireId>) : un poste tatami met ce lien en favori une fois pour
+   toutes et retombe toujours sur sa propre file d'attente, même après une coupure Wi-Fi/veille qui
+   aurait sinon perdu la sélection d'aire (jusque-là gardée seulement en mémoire JS, jamais dans l'URL). */
+function parseHashRoute() {
+  const m = /^#tatami\/(\d+)$/.exec(location.hash);
+  if (m) { currentRoute = "tatamis"; routeState.tatamiAireId = Number(m[1]); }
+}
+function syncTatamiHash(aireId) {
+  const wanted = "#tatami/" + aireId;
+  if (location.hash !== wanted) history.replaceState(null, "", wanted);
+}
+window.addEventListener("hashchange", () => { parseHashRoute(); renderApp(); });
 // Chrono par combat : { remainingMs, totalSec, running, runningSince }. remainingMs est le temps
 // restant "figé" au dernier point de contrôle (démarrage/pause/reset/réglage durée) ; pendant que
 // le chrono tourne, le temps réel affiché se calcule à partir de runningSince (horloge murale, voir
@@ -599,7 +612,7 @@ async function screenTatamis() {
   </div>`;
 
   const selAire = aires.find((a) => a.id === selId);
-  if (selAire) html += await renderFileAttente(selAire);
+  if (selAire) { syncTatamiHash(selAire.id); html += await renderFileAttente(selAire); }
   return html;
 }
 
@@ -612,7 +625,10 @@ async function renderFileAttente(aire) {
       <td>${badgeStatut(c.statut)} <button class="btn btn-sm ${primary ? "btn-primary" : ""}" data-action="goto-confrontation" data-id="${c.id}" data-type="${c.type}">${c.type === "kumite" ? "Arbitrer" : "Juger"}</button></td></tr>`;
   }
   const aVenirRows = fa.aVenir.map((e) => row(e, "À venir")).join("");
-  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}</h3>
+  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}
+      <button class="btn btn-sm btn-ghost" data-action="copy-tatami-link" data-id="${aire.id}" type="button" style="margin-left:8px;">🔗 Copier le lien de ce poste</button>
+    </h3>
+    <p class="hint" style="margin-top:-4px;">Ce lien ramène toujours directement à la file d'attente de <b>${esc(aire.nom)}</b> — à mettre en favori sur l'appareil de ce tatami.</p>
     <div class="table-wrap"><table><thead><tr><th>Statut</th><th>Rencontre</th><th></th></tr></thead><tbody>
       ${row(fa.enCours, "En cours", true)}
       ${row(fa.suivant, "Suivant")}
@@ -1001,6 +1017,12 @@ appEl.addEventListener("click", async (e) => {
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
   if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
+  if (a === "copy-tatami-link") {
+    const url = location.origin + "#tatami/" + btn.dataset.id;
+    try { await navigator.clipboard.writeText(url); toast("Lien copié : " + url); }
+    catch (e) { prompt("Copiez ce lien :", url); }
+    return;
+  }
   if (a === "save-aire-nom") {
     const input = document.querySelector(`.aire-nom-input[data-id="${btn.dataset.id}"]`);
     await safe(() => api.put(`/aires/${btn.dataset.id}`, { nom: input.value }));
@@ -1141,5 +1163,6 @@ appEl.addEventListener("submit", async (e) => {
   await renderApp();
 });
 
+parseHashRoute();
 renderApp();
 })();

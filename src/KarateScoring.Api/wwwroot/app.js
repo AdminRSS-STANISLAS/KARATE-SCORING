@@ -521,12 +521,46 @@ function renderBracket(confs, isRepechage) {
   confs.forEach((c) => (byTour[c.tour] = byTour[c.tour] || []).push(c));
   const tours = Object.keys(byTour).map(Number).sort((a, b) => a - b);
   const maxTour = tours[tours.length - 1];
-  const cols = tours.map((t) => {
+
+  const cols = tours.map((t, idx) => {
+    const isLastCol = idx === tours.length - 1;
     const label = isRepechage ? "Repêchage T" + t : (t === maxTour && byTour[t].length === 1 ? "Finale" : (t === maxTour - 1 ? "Demi-finales" : "Tour " + t));
-    const cards = byTour[t].map((c) => matchCard(c)).join("");
-    return `<div class="bracket-round"><div class="round-label">${label}</div>${cards}</div>`;
+
+    let inner;
+    if (isLastCol) {
+      inner = byTour[t].map((c) => `<div class="bracket-single">${matchCard(c)}</div>`).join("");
+    } else {
+      // Regroupe les combats de ce tour par combat suivant commun (prochainCombatId), pour dessiner
+      // les traits de crochet reliant chaque paire au combat qui en découle — plutôt que de supposer
+      // un ordre pair/impair fragile dès qu'il y a des exempts ou du repêchage.
+      const groups = {};
+      const order = [];
+      byTour[t].forEach((c) => {
+        const key = c.prochainCombatId != null ? String(c.prochainCombatId) : `solo-${c.id}`;
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        groups[key].push(c);
+      });
+      order.sort((a, b) => {
+        const na = /^\d+$/.test(a) ? +a : Infinity, nb = /^\d+$/.test(b) ? +b : Infinity;
+        return na - nb;
+      });
+      inner = order.map((key) => {
+        const g = groups[key];
+        return g.length === 2
+          ? `<div class="bracket-pair">${g.map((c) => matchCard(c)).join("")}</div>`
+          : `<div class="bracket-single">${matchCard(g[0])}</div>`;
+      }).join("");
+    }
+    return `<div class="bracket-round${isLastCol ? "" : " has-next"}"><div class="round-label">${label}</div><div class="bracket-matches">${inner}</div></div>`;
   }).join("");
-  return `<div class="bracket">${cols}</div>`;
+
+  const finale = byTour[maxTour].length === 1 ? byTour[maxTour][0] : null;
+  const championNom = finale && finale.vainqueurCouleur ? (finale.vainqueurCouleur === "Aka" ? finale.aNom : finale.bNom) : null;
+  const championHtml = !isRepechage && championNom
+    ? `<div class="bracket-champion"><div class="trophy">🏆</div><div class="champion-label">Vainqueur</div><div class="champion-name">${esc(championNom)}</div></div>`
+    : "";
+
+  return `<div class="bracket">${cols}${championHtml}</div>`;
 }
 function matchCard(c) {
   function slot(nom, id, couleur, score, isWinner) {

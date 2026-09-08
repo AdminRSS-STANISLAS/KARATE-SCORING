@@ -225,12 +225,29 @@ tr:last-child td{border-bottom:none;}
 .flag-btn.sel.aka{background:var(--aka); color:#fff; border-color:var(--aka);}
 .flag-btn.sel.ao{background:var(--ao); color:#fff; border-color:var(--ao);}
 
-.bracket{display:flex; gap:34px; overflow-x:auto; padding:10px 4px 20px;}
-.bracket-round{display:flex; flex-direction:column; justify-content:space-around; flex:0 0 210px; gap:16px;}
-.bracket-round .round-label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); text-align:center; margin-bottom:2px; font-weight:600;}
-.match-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:10px; overflow:hidden; box-shadow:var(--shadow-sm); cursor:pointer; transition:box-shadow .12s,border-color .12s;}
+.bracket{display:flex; align-items:stretch; gap:0; overflow-x:auto; padding:14px 4px 30px;}
+.bracket-round{display:flex; flex-direction:column; flex:0 0 230px; box-sizing:border-box;}
+.bracket-round.has-next{padding-right:40px;}
+.bracket-round .round-label{font-size:11px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); text-align:center; margin-bottom:10px; font-weight:600;}
+.bracket-matches{flex:1; display:flex; flex-direction:column; justify-content:space-around; gap:14px;}
+.bracket-pair{position:relative; display:flex; flex-direction:column; justify-content:space-between; gap:14px;}
+.bracket-single{position:relative;}
+/* Trait de crochet : relie le centre des deux combats d'une paire au combat suivant (bord droit de la colonne = bord gauche du combat suivant, sans zone morte à cause de la charnière border-box ci-dessus). */
+.bracket-round.has-next .bracket-pair::after{
+  content:""; position:absolute; top:32px; bottom:32px; right:-40px; width:40px;
+  border-top:2px solid var(--line); border-right:2px solid var(--line); border-bottom:2px solid var(--line);
+}
+.bracket-round.has-next .bracket-single::after{
+  content:""; position:absolute; top:50%; right:-40px; width:40px; height:2px; background:var(--line);
+}
+.bracket-champion{position:relative; align-self:center; display:flex; flex-direction:column; align-items:center; gap:4px; margin-left:40px; padding:16px 22px; border:1px solid var(--gold); border-radius:12px; background:var(--paper-raised); box-shadow:var(--shadow-sm); min-width:150px;}
+.bracket-champion::before{content:""; position:absolute; left:-40px; top:50%; width:40px; height:2px; background:var(--line);}
+.bracket-champion .trophy{font-size:26px; line-height:1;}
+.bracket-champion .champion-label{font-size:10px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-soft); font-weight:700;}
+.bracket-champion .champion-name{font-size:14px; font-weight:700; text-align:center;}
+.match-card{background:var(--paper-raised); border:1px solid var(--line); border-radius:10px; overflow:hidden; box-shadow:var(--shadow-sm); cursor:pointer; transition:box-shadow .12s,border-color .12s; height:64px; display:flex; flex-direction:column;}
 .match-card:hover{border-color:var(--ink-soft); box-shadow:var(--shadow);}
-.match-card .slot{display:flex; align-items:center; justify-content:space-between; gap:8px; padding:7px 10px; font-size:12.5px; border-bottom:1px solid var(--line);}
+.match-card .slot{flex:1 1 32px; display:flex; align-items:center; justify-content:space-between; gap:8px; padding:0 10px; font-size:12.5px; border-bottom:1px solid var(--line); min-height:0;}
 .match-card .slot:last-child{border-bottom:none;}
 .match-card .slot .who{display:flex; align-items:center; gap:7px; min-width:0;}
 .match-card .slot.win{font-weight:700;}

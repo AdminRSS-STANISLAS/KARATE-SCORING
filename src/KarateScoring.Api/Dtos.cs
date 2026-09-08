@@ -35,7 +35,8 @@ public record ConfrontationDto(
     int? AId, string? ANom, string? AClub, int? BId, string? BNom, string? BClub,
     int? ScoreAka, int? ScoreAo, string? SenshuCouleur, string? ModeDecision, string? VainqueurCouleur, int? DureeReelleSec,
     List<EvenementDto>? Evenements,
-    string? Kata1Nom, string? Kata2Nom, int? NbJuges, List<VoteDto>? Votes);
+    string? Kata1Nom, string? Kata2Nom, int? NbJuges, List<VoteDto>? Votes,
+    int? ProchainCombatId, string? ProchainCombatCouleur);
 
 public record TableauDto(int Id, int CategorieId, string Format, List<ConfrontationDto> Confrontations, int? AireId, string? AireNom);
 

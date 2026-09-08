@@ -16,10 +16,10 @@ public record CategorieDto(int Id, int CompetitionId, string Nom, string Discipl
     int? AgeMin, int? AgeMax, string? GradeMin, int InscritsCount, bool HasTableau);
 public record CreateCategorieRequest(string Nom, string Discipline, string? Sexe, int? AgeMin, int? AgeMax, string? GradeMin);
 
-public record ClubDto(int Id, string Nom);
+public record ClubDto(int Id, string Nom, bool ALogo);
 public record ResolveClubRequest(string Nom);
 
-public record ParticipantDto(int Id, string Nom, string Prenom, string Club, string? Grade, DateTime? DateNaissance, string? Licence, double? Poids);
+public record ParticipantDto(int Id, string Nom, string Prenom, string Club, string? Grade, DateTime? DateNaissance, string? Licence, double? Poids, bool APhoto);
 public record CreateParticipantRequest(string Nom, string Prenom, string Club, string? Grade, DateTime? DateNaissance, string? Licence, double? Poids);
 public record InscriptionsRequest(List<int> CategorieIds);
 

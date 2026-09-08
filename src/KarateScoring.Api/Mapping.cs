@@ -12,10 +12,10 @@ public static class Mapping
 
     public static KataDto ToDto(this Kata k) => new(k.Id, k.Nom);
 
-    public static ClubDto ToDto(this Club c) => new(c.Id, c.Nom);
+    public static ClubDto ToDto(this Club c) => new(c.Id, c.Nom, c.LogoExtension != null);
 
     public static ParticipantDto ToDto(this Participant p) => new(
-        p.Id, p.Nom, p.Prenom, p.Club?.Nom ?? "", p.Grade, p.DateNaissance, p.NumeroLicence, p.PoidsKg);
+        p.Id, p.Nom, p.Prenom, p.Club?.Nom ?? "", p.Grade, p.DateNaissance, p.NumeroLicence, p.PoidsKg, p.PhotoExtension != null);
 
     public static EquipeDto ToDto(this Equipe e, int? categorieId) => new(
         e.Id, e.Nom, e.Club?.Nom ?? "",

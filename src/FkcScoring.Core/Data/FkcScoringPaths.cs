@@ -14,6 +14,10 @@ public static class FkcScoringPaths
     public static string ResolveBackupDir(string dbPath) =>
         Path.Combine(Path.GetDirectoryName(dbPath) ?? DefaultDataDir(), "backups");
 
+    /// <summary>Dossier des images importées (photos d'athlètes, logos de clubs) — à côté de la base, pas dans wwwroot (contenu utilisateur, pas un asset de l'application).</summary>
+    public static string ResolveUploadsDir(string dbPath) =>
+        Path.Combine(Path.GetDirectoryName(dbPath) ?? DefaultDataDir(), "uploads");
+
     private static string DefaultDataDir() =>
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KarateScoring");
 }

@@ -13,5 +13,8 @@ public class Participant
     public string? Sexe { get; set; }
     public double? PoidsKg { get; set; }
 
+    /// <summary>"png" ou "jpg" si une photo a été importée (voir <see cref="Domain.ImageUploadService"/>) ; null sinon.</summary>
+    public string? PhotoExtension { get; set; }
+
     public string NomComplet => $"{Prenom} {Nom}".Trim();
 }

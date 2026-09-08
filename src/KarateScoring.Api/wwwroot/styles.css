@@ -265,6 +265,9 @@ tr:last-child td{border-bottom:none;}
 .match-card .slot.aka{border-left:3px solid var(--aka);}
 .match-card .slot.ao{border-left:3px solid var(--ao);}
 .gi-icon{flex:0 0 auto; display:block;}
+.avatar{position:relative; flex:0 0 auto; border-radius:50%; overflow:hidden; background:var(--paper-sunken); border:1px solid var(--line);}
+.avatar img{width:100%; height:100%; object-fit:cover; display:block;}
+.avatar-fallback{width:100%; height:100%; align-items:center; justify-content:center; color:var(--ink-soft);}
 
 .podium-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(160px,1fr)); gap:12px;}
 .medal-card{border-radius:var(--radius); padding:14px; text-align:center; border:1px solid var(--line); background:var(--paper-raised);}

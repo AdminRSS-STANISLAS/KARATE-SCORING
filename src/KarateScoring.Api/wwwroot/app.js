@@ -371,16 +371,30 @@ async function screenCategories() {
 }
 
 /* ---- Participants ---- */
+function avatarHtml(url, kind, hasImage, size) {
+  size = size || 34;
+  const icon = kind === "club" ? "🏫" : "🥋";
+  const fallback = `<span class="avatar-fallback" style="${hasImage ? "display:none;" : "display:flex;"}font-size:${Math.round(size * 0.55)}px;">${icon}</span>`;
+  const img = hasImage ? `<img src="${url}?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : "";
+  return `<span class="avatar" style="width:${size}px;height:${size}px;">${img}${fallback}</span>`;
+}
+const FORMAT_IMAGE_HINT = "Formats acceptés : PNG ou JPEG uniquement, 5 Mo maximum. Tout autre format sera refusé.";
+
 async function screenParticipants() {
   const comp = activeComp();
-  const [participants, cats] = await Promise.all([api.get("/participants"), api.get(`/competitions/${comp.id}/categories`)]);
+  const [participants, cats, clubs] = await Promise.all([api.get("/participants"), api.get(`/competitions/${comp.id}/categories`), api.get("/clubs")]);
   const catsIndividuelles = cats.filter((c) => c.discipline !== "KataEquipe");
 
   const rows = participants.map((p) => {
     const age = ageOf(p.dateNaissance, comp.date);
-    return `<tr><td><b>${esc(p.prenom + " " + p.nom)}</b><div class="hint">${esc(p.licence || "")}</div></td><td>${esc(p.club)}</td><td>${esc(p.grade || "")}</td><td>${age != null ? age + " ans" : "—"}</td><td>${p.poids ? p.poids + " kg" : "—"}</td>
-      <td><button class="btn btn-sm btn-ghost" data-action="inscrire" data-id="${p.id}">Inscrire…</button> <button class="btn btn-sm btn-ghost" data-action="del-part" data-id="${p.id}">Suppr.</button></td></tr>`;
+    return `<tr><td style="display:flex;align-items:center;gap:8px;">${avatarHtml(`/api/participants/${p.id}/photo`, "participant", p.aPhoto)}<div><b>${esc(p.prenom + " " + p.nom)}</b><div class="hint">${esc(p.licence || "")}</div></div></td><td>${esc(p.club)}</td><td>${esc(p.grade || "")}</td><td>${age != null ? age + " ans" : "—"}</td><td>${p.poids ? p.poids + " kg" : "—"}</td>
+      <td style="white-space:nowrap;">
+        <label class="btn btn-sm btn-ghost" title="${FORMAT_IMAGE_HINT}">📷 Photo<input type="file" accept="image/png,image/jpeg" data-action="upload-photo" data-id="${p.id}" style="display:none"></label>
+        <button class="btn btn-sm btn-ghost" data-action="inscrire" data-id="${p.id}">Inscrire…</button> <button class="btn btn-sm btn-ghost" data-action="del-part" data-id="${p.id}">Suppr.</button></td></tr>`;
   }).join("");
+
+  const clubRows = clubs.map((c) => `<tr><td style="display:flex;align-items:center;gap:8px;">${avatarHtml(`/api/clubs/${c.id}/logo`, "club", c.aLogo)}<b>${esc(c.nom)}</b></td>
+    <td style="white-space:nowrap;"><label class="btn btn-sm btn-ghost" title="${FORMAT_IMAGE_HINT}">🏷️ Logo<input type="file" accept="image/png,image/jpeg" data-action="upload-logo" data-id="${c.id}" style="display:none"></label></td></tr>`).join("");
 
   let inscrForm = "";
   if (routeState.inscrireId) {
@@ -406,7 +420,12 @@ async function screenParticipants() {
   </div>
   ${inscrForm}
   <div class="card"><h3>Participants <span class="muted">${participants.length}</span></h3>
+    <p class="hint" style="margin-top:-4px;">${FORMAT_IMAGE_HINT} La photo apparaît sur les écrans d'arbitrage et l'écran public.</p>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Club</th><th>Grade</th><th>Âge</th><th>Poids</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun participant. Ajoutez-en un ci-dessus.</p>'}
+  </div>
+  <div class="card"><h3>Clubs <span class="muted">${clubs.length}</span></h3>
+    <p class="hint" style="margin-top:-4px;">${FORMAT_IMAGE_HINT} Le logo apparaît sur l'écran public.</p>
+    ${clubRows ? `<div class="table-wrap"><table><thead><tr><th>Club</th><th></th></tr></thead><tbody>${clubRows}</tbody></table></div>` : '<p class="empty">Aucun club — créé automatiquement en ajoutant un participant.</p>'}
   </div>`;
 }
 
@@ -1171,6 +1190,16 @@ appEl.addEventListener("change", async (e) => {
     const kataId = Number(e.target.value);
     if (!kataId) return;
     await safe(() => api.post(`/kata-confrontations/${e.target.dataset.conf}/kata`, { couleur: e.target.dataset.couleur, kataId }));
+    await renderApp();
+  }
+  if (e.target.dataset.action === "upload-photo" || e.target.dataset.action === "upload-logo") {
+    const fichier = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!fichier) return;
+    const kind = e.target.dataset.action === "upload-photo" ? "participants" : "clubs";
+    const fd = new FormData();
+    fd.append("fichier", fichier);
+    if (await safe(() => apiUpload(`/${kind}/${e.target.dataset.id}/${kind === "participants" ? "photo" : "logo"}`, fd))) toast("Image importée.");
     await renderApp();
   }
 });

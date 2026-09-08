@@ -268,3 +268,14 @@ tr:last-child td{border-bottom:none;}
 .medal-card .cnm{font-weight:700; font-size:14.5px;}
 
 .spinner-line{padding:40px 0; text-align:center; color:var(--ink-soft); font-size:13px;}
+
+@media print{
+  @page{ size:landscape; margin:12mm; }
+  body{background:#fff; color:#111;}
+  .mobile-topbar, .sidebar, .sidebar-backdrop, .toast-wrap{display:none !important;}
+  main{padding:0; margin:0; max-width:none; width:100%;}
+  .topbar .btn, .topbar select, .card h3 select, .card h3 button{display:none !important;}
+  .card{box-shadow:none; border:1px solid #ccc; break-inside:avoid;}
+  .bracket{overflow:visible;}
+  .match-card{box-shadow:none; -webkit-print-color-adjust:exact; print-color-adjust:exact;}
+}

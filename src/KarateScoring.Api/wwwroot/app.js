@@ -485,6 +485,7 @@ function renderTableauBody(tableau, cat, aires) {
   const aireOpts = `<option value="">Aucune aire</option>` + (aires || []).map((a) => `<option value="${a.id}" ${tableau.aireId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("");
   let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span>
     <select data-action="assign-aire" data-tab="${tableau.id}" style="margin-left:10px;font-size:12px;">${aireOpts}</select>
+    <button class="btn btn-sm btn-ghost" data-action="print-tableau" type="button">🖨️ Imprimer</button>
     <button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
 
   if (tableau.format === "PouleUnique") {
@@ -1011,6 +1012,7 @@ appEl.addEventListener("click", async (e) => {
   if (a === "close-inscrire") { routeState.inscrireId = null; await renderApp(); return; }
   if (a === "del-part") { await safe(() => api.del(`/participants/${btn.dataset.id}`)); await renderApp(); return; }
   if (a === "del-equipe") { await safe(() => api.del(`/equipes/${btn.dataset.id}`)); await renderApp(); return; }
+  if (a === "print-tableau") { window.print(); return; }
   if (a === "regen-tableau") {
     if (!confirm("Régénérer ce tableau ? Les résultats déjà saisis seront perdus.")) return;
     await safe(() => api.del(`/tableaux/${btn.dataset.tab}`)); await renderApp(); return;

@@ -56,7 +56,7 @@ async function safe(fn) {
 /* ================= State ================= */
 let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_competition")) || null;
 let operateurNom = localStorage.getItem("karate_scoring_operateur") || "";
-let currentRoute = "competitions";
+let currentRoute = "accueil";
 let routeState = {};
 
 /* Lien direct par tatami (#tatami/<aireId>) : un poste tatami met ce lien en favori une fois pour
@@ -208,6 +208,7 @@ function nomDeId(confs, id) {
 
 /* ================= Routing / Render ================= */
 const NAV = [
+  { id: "accueil", label: "Accueil", ico: "⌂", kanji: "家" },
   { sec: "Organisation" },
   { id: "competitions", label: "Compétitions", ico: "◆", kanji: "大会" },
   { id: "categories", label: "Catégories", ico: "▤", kanji: "級" },
@@ -274,6 +275,7 @@ function screenGuardNoComp() {
 
 async function renderScreen() {
   switch (currentRoute) {
+    case "accueil": return await screenAccueil();
     case "competitions": return await screenCompetitions();
     case "categories": return activeComp() ? await screenCategories() : screenGuardNoComp();
     case "participants": return activeComp() ? await screenParticipants() : screenGuardNoComp();
@@ -285,8 +287,56 @@ async function renderScreen() {
     case "resultats": return activeComp() ? await screenResultats() : screenGuardNoComp();
     case "audit": return await screenAudit();
     case "securite": return await screenSecurite();
-    default: return await screenCompetitions();
+    default: return await screenAccueil();
   }
+}
+
+/* ---- Accueil ---- */
+async function screenAccueil() {
+  const comp = activeComp();
+  if (!comp) {
+    return `<div class="welcome-screen">
+      <img class="welcome-logo" src="assets/karate-scoring-logo.jpg" alt="Karate Scoring">
+      <h1>Bienvenue dans Karate Scoring</h1>
+      <p class="welcome-msg">Aux arbitres et opérateurs : veuillez sélectionner une compétition pour commencer.</p>
+      <div class="welcome-actions">
+        <button class="btn btn-primary" data-nav="competitions">Aller à Compétitions</button>
+      </div>
+    </div>`;
+  }
+
+  const cats = await api.get(`/competitions/${comp.id}/categories`);
+  const avecTableau = cats.filter((c) => c.hasTableau);
+  const tableaux = await Promise.all(avecTableau.map(async (c) => ({ cat: c, tableau: await api.get(`/categories/${c.id}/tableau`) })));
+
+  const brackets = tableaux.map(({ cat, tableau }) => {
+    let html;
+    if (tableau.format === "PouleUnique") html = renderPouleTable(tableau.confrontations, null);
+    else {
+      const finale = tableau.confrontations.filter((c) => !c.estRepechage && (tableau.format !== "PoulePuisElimination" || c.tour >= 2));
+      html = finale.length ? renderBracket(finale) : renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1), null);
+    }
+    return `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span></h3>${html}</div>`;
+  }).join("");
+
+  // Combat suivant, toutes catégories confondues (hypothèse un seul tatami actif — cahier §14/15) :
+  // priorité au combat déjà en cours, sinon le premier en attente.
+  const kumite = await kumiteEligibleConfs(comp);
+  const enCours = kumite.find((x) => x.c.statut === "EnCours");
+  const suivant = enCours || kumite.find((x) => x.c.statut === "EnAttente");
+  const suivantHtml = suivant ? `
+    <div class="card next-combat-card">
+      <h3>${suivant.c.statut === "EnCours" ? "Combat en cours" : "Combat suivant"} <span class="muted">${esc(suivant.cat.nom)}</span></h3>
+      <div class="next-combat-row">
+        <div class="next-combat-side">${publicPhotoFrame(suivant.c.aId, "aka", 80)}<div class="next-combat-name">${esc(suivant.c.aNom)}</div><div class="next-combat-club">${esc(suivant.c.aClub || "")}</div></div>
+        <div class="next-combat-vs">VS</div>
+        <div class="next-combat-side">${publicPhotoFrame(suivant.c.bId, "ao", 80)}<div class="next-combat-name">${esc(suivant.c.bNom)}</div><div class="next-combat-club">${esc(suivant.c.bClub || "")}</div></div>
+      </div>
+    </div>` : "";
+
+  return `<div class="topbar"><div><div class="crumb">Karate Scoring</div><h1>Bienvenue à ${esc(comp.nom)}${comp.lieu ? " — " + esc(comp.lieu) : ""}</h1></div></div>
+  ${brackets || '<p class="empty">Aucun tableau généré pour l\'instant — rendez-vous dans l\'écran Tableaux.</p>'}
+  ${suivantHtml}`;
 }
 
 /* ---- Compétitions ---- */
@@ -699,11 +749,12 @@ function publicChronoTxt(c) {
   return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 }
 
-function publicPhotoFrame(participantId, couleur) {
+function publicPhotoFrame(participantId, couleur, sizePx) {
   const img = participantId != null
     ? `<img src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
     : "";
-  return `<div class="public-photo-frame ${couleur}">${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, 100)}</div></div>`;
+  const sizeStyle = sizePx ? `style="width:${sizePx}px;height:${sizePx}px;"` : "";
+  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
 }
 function publicEvenements(evenements, couleur) {
   const filtres = (evenements || []).filter((e) => e.couleur === (couleur === "aka" ? "Aka" : "Ao"));
@@ -1094,7 +1145,7 @@ appEl.addEventListener("click", async (e) => {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;
     const code = demanderCodeAdminSiConfigure();
     if (code === undefined) return;
-    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "accueil"; }
     await renderApp(); return;
   }
   if (a === "restaurer-sauvegarde") {

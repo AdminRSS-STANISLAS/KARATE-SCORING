@@ -699,6 +699,18 @@ function publicChronoTxt(c) {
   return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 }
 
+function publicPhotoFrame(participantId, couleur) {
+  const img = participantId != null
+    ? `<img src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+    : "";
+  return `<div class="public-photo-frame ${couleur}">${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, 100)}</div></div>`;
+}
+function publicEvenements(evenements, couleur) {
+  const filtres = (evenements || []).filter((e) => e.couleur === (couleur === "aka" ? "Aka" : "Ao"));
+  if (!filtres.length) return '<div class="public-ev-empty">—</div>';
+  return filtres.slice(0, 6).map((e) => `<div class="public-ev ${e.kind}"><span class="public-ev-t">${esc(e.t)}</span><span class="public-ev-label">${esc(e.label)}</span></div>`).join("");
+}
+
 function renderPublicBody(fa) {
   const entry = fa.enCours || fa.suivant;
   if (!entry) {
@@ -706,14 +718,26 @@ function renderPublicBody(fa) {
   }
   const c = entry.confrontation;
   const chrono = publicChronoTxt(c);
-  const scoreHtml = c.type === "kumite"
+  const isKumite = c.type === "kumite";
+  const scoreHtml = isKumite
     ? `<div class="public-scores"><div class="public-score aka">${c.scoreAka ?? 0}</div><div class="public-chrono">${chrono || "—:—"}</div><div class="public-score ao">${c.scoreAo ?? 0}</div></div>`
     : `<div class="public-scores"><div class="public-score aka">${(c.votes || []).filter((v) => v.couleur === "Aka").length}</div><div class="public-chrono">VOTES</div><div class="public-score ao">${(c.votes || []).filter((v) => v.couleur === "Ao").length}</div></div>`;
+  const senshuAka = c.senshuCouleur === "Aka", senshuAo = c.senshuCouleur === "Ao";
   return `
     <div class="public-topline">${esc(fa.aireNom)} · ${esc(entry.categorieNom)}${fa.enCours ? "" : '<span class="public-tag-next">PROCHAIN COMBAT</span>'}</div>
     <div class="public-competitors">
-      <div class="public-competitor aka"><div class="public-color">AKA</div><div class="public-name">${esc(c.aNom || "—")}</div><div class="public-club">${esc(c.aClub || "")}</div></div>
-      <div class="public-competitor ao"><div class="public-color">AO</div><div class="public-name">${esc(c.bNom || "—")}</div><div class="public-club">${esc(c.bClub || "")}</div></div>
+      <div class="public-competitor aka">
+        ${publicPhotoFrame(c.aId, "aka")}
+        <div class="public-color">AKA${senshuAka ? '<span class="public-senshu">★ SENSHU</span>' : ""}</div>
+        <div class="public-name">${esc(c.aNom || "—")}</div><div class="public-club">${esc(c.aClub || "")}</div>
+        ${isKumite ? `<div class="public-ev-list">${publicEvenements(c.evenements, "aka")}</div>` : ""}
+      </div>
+      <div class="public-competitor ao">
+        ${publicPhotoFrame(c.bId, "ao")}
+        <div class="public-color">AO${senshuAo ? '<span class="public-senshu">★ SENSHU</span>' : ""}</div>
+        <div class="public-name">${esc(c.bNom || "—")}</div><div class="public-club">${esc(c.bClub || "")}</div>
+        ${isKumite ? `<div class="public-ev-list">${publicEvenements(c.evenements, "ao")}</div>` : ""}
+      </div>
     </div>
     ${scoreHtml}`;
 }

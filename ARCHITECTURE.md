@@ -25,8 +25,9 @@ Chaque poste (organisateur, arbitre, écran public) est simplement un navigateur
 |---|---|
 | `src/KarateScoring.Api` | **Application active.** API REST ASP.NET Core (.NET 9) + frontend statique (`wwwroot/`, HTML/CSS/JS vanilla, sans framework front). C'est le produit livré. |
 | `src/FkcScoring.Core` | Domaine métier partagé : entités EF Core, `DbContext`, moteurs de règles (scoring, tableaux, kata), services (sécurité, audit, sauvegarde, réseau, chemins). Référencé par l'API. |
-| `src/FkcScoring.App` | **Legacy.** Prototype WPF desktop antérieur au pivot vers la plateforme web (un seul poste, sans réseau). Non maintenu depuis le pivot — conservé dans la solution mais hors du produit livré. |
 | `tests/FkcScoring.Core.Tests` | Tests unitaires du domaine métier (scoring, tableaux, sécurité, sauvegarde, concurrence). |
+
+> Le prototype WPF desktop antérieur au pivot vers la plateforme web (`FkcScoring.App`, un seul poste, sans réseau) a été retiré de la solution — non maintenu depuis le pivot, entièrement remplacé par `KarateScoring.Api`. Toujours consultable dans l'historique git si besoin.
 
 ## Frontend (`src/KarateScoring.Api/wwwroot/`)
 

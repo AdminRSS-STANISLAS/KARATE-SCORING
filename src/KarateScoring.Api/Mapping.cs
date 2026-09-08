@@ -12,10 +12,10 @@ public static class Mapping
 
     public static KataDto ToDto(this Kata k) => new(k.Id, k.Nom);
 
-    public static ClubDto ToDto(this Club c) => new(c.Id, c.Nom);
+    public static ClubDto ToDto(this Club c) => new(c.Id, c.Nom, c.LogoExtension != null);
 
     public static ParticipantDto ToDto(this Participant p) => new(
-        p.Id, p.Nom, p.Prenom, p.Club?.Nom ?? "", p.Grade, p.DateNaissance, p.NumeroLicence, p.PoidsKg);
+        p.Id, p.Nom, p.Prenom, p.Club?.Nom ?? "", p.Grade, p.DateNaissance, p.NumeroLicence, p.PoidsKg, p.PhotoExtension != null);
 
     public static EquipeDto ToDto(this Equipe e, int? categorieId) => new(
         e.Id, e.Nom, e.Club?.Nom ?? "",
@@ -33,7 +33,9 @@ public static class Mapping
             e.Couleur.ToString(),
             e.Type == TypeEvenement.Point ? PointLabel(e.Points) : e.Penalite.ToString() ?? "",
             e.Points)).ToList(),
-        null, null, null, null);
+        null, null, null, null,
+        c.ProchainCombatId, c.ProchainCombatCouleur?.ToString(),
+        c.ChronoDemarreLeUtc, c.ChronoRestantMs);
 
     private static string PointLabel(int? points) => points switch { 3 => "Ippon", 2 => "Waza-ari", 1 => "Yuko", _ => "Point" };
 
@@ -53,7 +55,9 @@ public static class Mapping
             null, null, null, null, c.VainqueurCouleur?.ToString(), null,
             null,
             c.Kata1?.Nom, c.Kata2?.Nom, c.NbJuges,
-            c.Votes.Select(v => new VoteDto(v.JugeNumero, v.VoteCouleur.ToString())).ToList());
+            c.Votes.Select(v => new VoteDto(v.JugeNumero, v.VoteCouleur.ToString())).ToList(),
+            c.ProchainConfrontationId, c.ProchainConfrontationCouleur?.ToString(),
+            null, null);
     }
 
     public static AireDto ToDto(this Aire a) => new(a.Id, a.Nom, a.Ordre);

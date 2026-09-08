@@ -21,6 +21,14 @@ public class Combat
     public int? DureeReelleSec { get; set; }
     public StatutCombat Statut { get; set; } = StatutCombat.EnAttente;
 
+    /// <summary>
+    /// Miroir de l'état du chronomètre (qui vit côté client, ancré sur l'horloge murale — voir
+    /// CombatsController) pour que d'autres postes (écran public sur TV) puissent le reconstruire
+    /// sans dépendre du navigateur de l'arbitre. Non nul seulement pendant/en pause d'un combat.
+    /// </summary>
+    public DateTime? ChronoDemarreLeUtc { get; set; }
+    public int? ChronoRestantMs { get; set; }
+
     /// <summary>Jeton de concurrence (incrémenté à chaque écriture) : détecte deux postes qui touchent le même combat en parallèle.</summary>
     public int RowVersion { get; set; }
 

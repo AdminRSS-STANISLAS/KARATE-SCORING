@@ -1,5 +1,6 @@
 using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using FkcScoring.Core.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -9,6 +10,8 @@ namespace KarateScoring.Api.Controllers;
 [Route("api/participants")]
 public class ParticipantsController(FkcScoringContext db) : ControllerBase
 {
+    private static string UploadsDir => FkcScoringPaths.ResolveUploadsDir(FkcScoringPaths.ResolveDbPath());
+
     [HttpGet]
     public async Task<List<ParticipantDto>> GetAll() =>
         (await db.Participants.Include(p => p.Club).OrderBy(p => p.Nom).ToListAsync()).Select(p => p.ToDto()).ToList();
@@ -41,10 +44,55 @@ public class ParticipantsController(FkcScoringContext db) : ControllerBase
     {
         var participant = await db.Participants.FindAsync(id);
         if (participant == null) return NotFound();
+        if (participant.PhotoExtension != null) ImageUploadService.Supprimer(UploadsDir, "participant", id, participant.PhotoExtension);
         db.Inscriptions.RemoveRange(db.Inscriptions.Where(i => i.ParticipantId == id));
         db.EquipeMembres.RemoveRange(db.EquipeMembres.Where(m => m.ParticipantId == id));
         db.Participants.Remove(participant);
         await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpPost("{id}/photo")]
+    [RequestSizeLimit(ImageUploadService.TailleMaxOctets + 1024)]
+    public async Task<IActionResult> UploaderPhoto(int id, IFormFile fichier)
+    {
+        var participant = await db.Participants.FindAsync(id);
+        if (participant == null) return NotFound();
+        if (fichier == null || fichier.Length == 0) return BadRequest("Aucun fichier reçu.");
+
+        using var ms = new MemoryStream();
+        await fichier.CopyToAsync(ms);
+        var (ok, extension, erreur) = ImageUploadService.Valider(ms.ToArray());
+        if (!ok) return BadRequest(erreur);
+
+        ImageUploadService.Enregistrer(UploadsDir, "participant", id, extension!, ms.ToArray(), participant.PhotoExtension);
+        participant.PhotoExtension = extension;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
+    [HttpGet("{id}/photo")]
+    public async Task<IActionResult> ObtenirPhoto(int id)
+    {
+        var participant = await db.Participants.FindAsync(id);
+        if (participant?.PhotoExtension == null) return NotFound();
+        var chemin = ImageUploadService.CheminFichier(UploadsDir, "participant", id, participant.PhotoExtension);
+        if (!System.IO.File.Exists(chemin)) return NotFound();
+        Response.Headers.CacheControl = "no-store";
+        return PhysicalFile(chemin, ImageUploadService.ContentType(participant.PhotoExtension));
+    }
+
+    [HttpDelete("{id}/photo")]
+    public async Task<IActionResult> SupprimerPhoto(int id)
+    {
+        var participant = await db.Participants.FindAsync(id);
+        if (participant == null) return NotFound();
+        if (participant.PhotoExtension != null)
+        {
+            ImageUploadService.Supprimer(UploadsDir, "participant", id, participant.PhotoExtension);
+            participant.PhotoExtension = null;
+            await db.SaveChangesAsync();
+        }
         return NoContent();
     }
 

@@ -61,7 +61,8 @@ public class AiresController(FkcScoringContext db, AuditService audit) : Control
     [HttpGet("aires/{id}/file-attente")]
     public async Task<ActionResult<FileAttenteDto>> FileAttente(int id)
     {
-        if (await db.Aires.FindAsync(id) == null) return NotFound();
+        var aire = await db.Aires.FindAsync(id);
+        if (aire == null) return NotFound();
 
         var tableaux = await db.Tableaux.Where(t => t.AireId == id).Include(t => t.Categorie).ToListAsync();
         var entries = new List<FileAttenteEntryDto>();
@@ -103,6 +104,6 @@ public class AiresController(FkcScoringContext db, AuditService audit) : Control
         var suivant = restants.FirstOrDefault();
         var aVenir = suivant == null ? restants : restants.Skip(1).ToList();
 
-        return new FileAttenteDto(enCours, suivant, aVenir);
+        return new FileAttenteDto(aire.Nom, enCours, suivant, aVenir);
     }
 }

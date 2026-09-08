@@ -3,6 +3,7 @@ using System;
 using FkcScoring.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FkcScoring.Core.Data.Migrations
 {
     [DbContext(typeof(FkcScoringContext))]
-    partial class FkcScoringContextModelSnapshot : ModelSnapshot
+    [Migration("20260908095236_AddChronoSync")]
+    partial class AddChronoSync
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.19");
@@ -161,9 +164,6 @@ namespace FkcScoring.Core.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
-
-                    b.Property<string>("LogoExtension")
-                        .HasColumnType("TEXT");
 
                     b.Property<string>("Nom")
                         .IsRequired()
@@ -698,9 +698,6 @@ namespace FkcScoring.Core.Data.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<string>("NumeroLicence")
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("PhotoExtension")
                         .HasColumnType("TEXT");
 
                     b.Property<double?>("PoidsKg")

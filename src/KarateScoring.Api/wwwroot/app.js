@@ -56,8 +56,23 @@ async function safe(fn) {
 /* ================= State ================= */
 let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_competition")) || null;
 let operateurNom = localStorage.getItem("karate_scoring_operateur") || "";
-let currentRoute = "competitions";
+let currentRoute = "accueil";
 let routeState = {};
+
+/* Lien direct par tatami (#tatami/<aireId>) : un poste tatami met ce lien en favori une fois pour
+   toutes et retombe toujours sur sa propre file d'attente, même après une coupure Wi-Fi/veille qui
+   aurait sinon perdu la sélection d'aire (jusque-là gardée seulement en mémoire JS, jamais dans l'URL). */
+function parseHashRoute() {
+  const mTatami = /^#tatami\/(\d+)$/.exec(location.hash);
+  if (mTatami) { currentRoute = "tatamis"; routeState.tatamiAireId = Number(mTatami[1]); return; }
+  const mPublic = /^#public\/(\d+)$/.exec(location.hash);
+  if (mPublic) { currentRoute = "public"; routeState.publicAireId = Number(mPublic[1]); }
+}
+function syncTatamiHash(aireId) {
+  const wanted = "#tatami/" + aireId;
+  if (location.hash !== wanted) history.replaceState(null, "", wanted);
+}
+window.addEventListener("hashchange", () => { parseHashRoute(); renderApp(); });
 // Chrono par combat : { remainingMs, totalSec, running, runningSince }. remainingMs est le temps
 // restant "figé" au dernier point de contrôle (démarrage/pause/reset/réglage durée) ; pendant que
 // le chrono tourne, le temps réel affiché se calcule à partir de runningSince (horloge murale, voir
@@ -81,6 +96,11 @@ function saveTimers() {
 function chronoRemainingMs(t) {
   if (!t) return 0;
   return t.running ? Math.max(0, t.remainingMs - (Date.now() - t.runningSince)) : t.remainingMs;
+}
+/* Miroise l'état du chrono côté serveur (démarré/en pause + temps restant) pour qu'un écran public
+   sur un autre appareil puisse le reconstruire par polling — best-effort, ne bloque jamais l'arbitre. */
+function syncChronoServeur(confId, t) {
+  api.post(`/combats/${confId}/chrono-sync`, { running: !!(t && t.running), remainingMs: chronoRemainingMs(t) }).catch(() => {});
 }
 
 function setActiveCompetition(id) {
@@ -188,6 +208,7 @@ function nomDeId(confs, id) {
 
 /* ================= Routing / Render ================= */
 const NAV = [
+  { id: "accueil", label: "Accueil", ico: "⌂", kanji: "家" },
   { sec: "Organisation" },
   { id: "competitions", label: "Compétitions", ico: "◆", kanji: "大会" },
   { id: "categories", label: "Catégories", ico: "▤", kanji: "級" },
@@ -205,6 +226,7 @@ const NAV = [
 ];
 
 async function renderApp() {
+  if (currentRoute === "public") { await renderPublicScreen(); return; }
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
@@ -253,6 +275,7 @@ function screenGuardNoComp() {
 
 async function renderScreen() {
   switch (currentRoute) {
+    case "accueil": return await screenAccueil();
     case "competitions": return await screenCompetitions();
     case "categories": return activeComp() ? await screenCategories() : screenGuardNoComp();
     case "participants": return activeComp() ? await screenParticipants() : screenGuardNoComp();
@@ -264,8 +287,56 @@ async function renderScreen() {
     case "resultats": return activeComp() ? await screenResultats() : screenGuardNoComp();
     case "audit": return await screenAudit();
     case "securite": return await screenSecurite();
-    default: return await screenCompetitions();
+    default: return await screenAccueil();
   }
+}
+
+/* ---- Accueil ---- */
+async function screenAccueil() {
+  const comp = activeComp();
+  if (!comp) {
+    return `<div class="welcome-screen">
+      <img class="welcome-logo" src="assets/karate-scoring-logo.jpg" alt="Karate Scoring">
+      <h1>Bienvenue dans Karate Scoring</h1>
+      <p class="welcome-msg">Aux arbitres et opérateurs : veuillez sélectionner une compétition pour commencer.</p>
+      <div class="welcome-actions">
+        <button class="btn btn-primary" data-nav="competitions">Aller à Compétitions</button>
+      </div>
+    </div>`;
+  }
+
+  const cats = await api.get(`/competitions/${comp.id}/categories`);
+  const avecTableau = cats.filter((c) => c.hasTableau);
+  const tableaux = await Promise.all(avecTableau.map(async (c) => ({ cat: c, tableau: await api.get(`/categories/${c.id}/tableau`) })));
+
+  const brackets = tableaux.map(({ cat, tableau }) => {
+    let html;
+    if (tableau.format === "PouleUnique") html = renderPouleTable(tableau.confrontations, null);
+    else {
+      const finale = tableau.confrontations.filter((c) => !c.estRepechage && (tableau.format !== "PoulePuisElimination" || c.tour >= 2));
+      html = finale.length ? renderBracket(finale) : renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1), null);
+    }
+    return `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span></h3>${html}</div>`;
+  }).join("");
+
+  // Combat suivant, toutes catégories confondues (hypothèse un seul tatami actif — cahier §14/15) :
+  // priorité au combat déjà en cours, sinon le premier en attente.
+  const kumite = await kumiteEligibleConfs(comp);
+  const enCours = kumite.find((x) => x.c.statut === "EnCours");
+  const suivant = enCours || kumite.find((x) => x.c.statut === "EnAttente");
+  const suivantHtml = suivant ? `
+    <div class="card next-combat-card">
+      <h3>${suivant.c.statut === "EnCours" ? "Combat en cours" : "Combat suivant"} <span class="muted">${esc(suivant.cat.nom)}</span></h3>
+      <div class="next-combat-row">
+        <div class="next-combat-side">${publicPhotoFrame(suivant.c.aId, "aka", 80)}<div class="next-combat-name">${esc(suivant.c.aNom)}</div><div class="next-combat-club">${esc(suivant.c.aClub || "")}</div></div>
+        <div class="next-combat-vs">VS</div>
+        <div class="next-combat-side">${publicPhotoFrame(suivant.c.bId, "ao", 80)}<div class="next-combat-name">${esc(suivant.c.bNom)}</div><div class="next-combat-club">${esc(suivant.c.bClub || "")}</div></div>
+      </div>
+    </div>` : "";
+
+  return `<div class="topbar"><div><div class="crumb">Karate Scoring</div><h1>Bienvenue à ${esc(comp.nom)}${comp.lieu ? " — " + esc(comp.lieu) : ""}</h1></div></div>
+  ${brackets || '<p class="empty">Aucun tableau généré pour l\'instant — rendez-vous dans l\'écran Tableaux.</p>'}
+  ${suivantHtml}`;
 }
 
 /* ---- Compétitions ---- */
@@ -350,16 +421,30 @@ async function screenCategories() {
 }
 
 /* ---- Participants ---- */
+function avatarHtml(url, kind, hasImage, size) {
+  size = size || 34;
+  const icon = kind === "club" ? "🏫" : "🥋";
+  const fallback = `<span class="avatar-fallback" style="${hasImage ? "display:none;" : "display:flex;"}font-size:${Math.round(size * 0.55)}px;">${icon}</span>`;
+  const img = hasImage ? `<img src="${url}?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">` : "";
+  return `<span class="avatar" style="width:${size}px;height:${size}px;">${img}${fallback}</span>`;
+}
+const FORMAT_IMAGE_HINT = "Formats acceptés : PNG ou JPEG uniquement, 5 Mo maximum. Tout autre format sera refusé.";
+
 async function screenParticipants() {
   const comp = activeComp();
-  const [participants, cats] = await Promise.all([api.get("/participants"), api.get(`/competitions/${comp.id}/categories`)]);
+  const [participants, cats, clubs] = await Promise.all([api.get("/participants"), api.get(`/competitions/${comp.id}/categories`), api.get("/clubs")]);
   const catsIndividuelles = cats.filter((c) => c.discipline !== "KataEquipe");
 
   const rows = participants.map((p) => {
     const age = ageOf(p.dateNaissance, comp.date);
-    return `<tr><td><b>${esc(p.prenom + " " + p.nom)}</b><div class="hint">${esc(p.licence || "")}</div></td><td>${esc(p.club)}</td><td>${esc(p.grade || "")}</td><td>${age != null ? age + " ans" : "—"}</td><td>${p.poids ? p.poids + " kg" : "—"}</td>
-      <td><button class="btn btn-sm btn-ghost" data-action="inscrire" data-id="${p.id}">Inscrire…</button> <button class="btn btn-sm btn-ghost" data-action="del-part" data-id="${p.id}">Suppr.</button></td></tr>`;
+    return `<tr><td style="display:flex;align-items:center;gap:8px;">${avatarHtml(`/api/participants/${p.id}/photo`, "participant", p.aPhoto)}<div><b>${esc(p.prenom + " " + p.nom)}</b><div class="hint">${esc(p.licence || "")}</div></div></td><td>${esc(p.club)}</td><td>${esc(p.grade || "")}</td><td>${age != null ? age + " ans" : "—"}</td><td>${p.poids ? p.poids + " kg" : "—"}</td>
+      <td style="white-space:nowrap;">
+        <label class="btn btn-sm btn-ghost" title="${FORMAT_IMAGE_HINT}">📷 Photo<input type="file" accept="image/png,image/jpeg" data-action="upload-photo" data-id="${p.id}" style="display:none"></label>
+        <button class="btn btn-sm btn-ghost" data-action="inscrire" data-id="${p.id}">Inscrire…</button> <button class="btn btn-sm btn-ghost" data-action="del-part" data-id="${p.id}">Suppr.</button></td></tr>`;
   }).join("");
+
+  const clubRows = clubs.map((c) => `<tr><td style="display:flex;align-items:center;gap:8px;">${avatarHtml(`/api/clubs/${c.id}/logo`, "club", c.aLogo)}<b>${esc(c.nom)}</b></td>
+    <td style="white-space:nowrap;"><label class="btn btn-sm btn-ghost" title="${FORMAT_IMAGE_HINT}">🏷️ Logo<input type="file" accept="image/png,image/jpeg" data-action="upload-logo" data-id="${c.id}" style="display:none"></label></td></tr>`).join("");
 
   let inscrForm = "";
   if (routeState.inscrireId) {
@@ -385,7 +470,12 @@ async function screenParticipants() {
   </div>
   ${inscrForm}
   <div class="card"><h3>Participants <span class="muted">${participants.length}</span></h3>
+    <p class="hint" style="margin-top:-4px;">${FORMAT_IMAGE_HINT} La photo apparaît sur les écrans d'arbitrage et l'écran public.</p>
     ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th>Club</th><th>Grade</th><th>Âge</th><th>Poids</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun participant. Ajoutez-en un ci-dessus.</p>'}
+  </div>
+  <div class="card"><h3>Clubs <span class="muted">${clubs.length}</span></h3>
+    <p class="hint" style="margin-top:-4px;">${FORMAT_IMAGE_HINT} Le logo apparaît sur l'écran public.</p>
+    ${clubRows ? `<div class="table-wrap"><table><thead><tr><th>Club</th><th></th></tr></thead><tbody>${clubRows}</tbody></table></div>` : '<p class="empty">Aucun club — créé automatiquement en ajoutant un participant.</p>'}
   </div>`;
 }
 
@@ -472,6 +562,7 @@ function renderTableauBody(tableau, cat, aires) {
   const aireOpts = `<option value="">Aucune aire</option>` + (aires || []).map((a) => `<option value="${a.id}" ${tableau.aireId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("");
   let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span>
     <select data-action="assign-aire" data-tab="${tableau.id}" style="margin-left:10px;font-size:12px;">${aireOpts}</select>
+    <button class="btn btn-sm btn-ghost" data-action="print-tableau" type="button">🖨️ Imprimer</button>
     <button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
 
   if (tableau.format === "PouleUnique") {
@@ -505,7 +596,7 @@ function renderPouleTable(confs, label) {
       ? (c.type === "kumite"
         ? `${esc(c.aNom)} <span class="tag tag-aka">${c.scoreAka}</span> — <span class="tag tag-ao">${c.scoreAo}</span> ${esc(c.bNom)}`
         : `${esc(c.aNom)} <span class="tag tag-aka">${(c.votes || []).filter((v) => v.couleur === "Aka").length}</span> — <span class="tag tag-ao">${(c.votes || []).filter((v) => v.couleur === "Ao").length}</span> ${esc(c.bNom)}`)
-      : '<span class="tag tag-attente">à jouer</span>';
+      : '<span class="tag tag-attente">à arbitrer</span>';
     return `<tr><td>${esc(c.aNom)} <span class="vs">vs</span> ${esc(c.bNom)}</td><td>${statut}</td></tr>`;
   }).join("");
   const classRows = classement.map((r, i) => { const { nom } = nomDeId(confs, r.id); return `<tr><td>${i + 1}</td><td>${esc(nom)}</td><td>${r.victoires}</td><td>${r.diff}</td></tr>`; }).join("");
@@ -521,12 +612,46 @@ function renderBracket(confs, isRepechage) {
   confs.forEach((c) => (byTour[c.tour] = byTour[c.tour] || []).push(c));
   const tours = Object.keys(byTour).map(Number).sort((a, b) => a - b);
   const maxTour = tours[tours.length - 1];
-  const cols = tours.map((t) => {
+
+  const cols = tours.map((t, idx) => {
+    const isLastCol = idx === tours.length - 1;
     const label = isRepechage ? "Repêchage T" + t : (t === maxTour && byTour[t].length === 1 ? "Finale" : (t === maxTour - 1 ? "Demi-finales" : "Tour " + t));
-    const cards = byTour[t].map((c) => matchCard(c)).join("");
-    return `<div class="bracket-round"><div class="round-label">${label}</div>${cards}</div>`;
+
+    let inner;
+    if (isLastCol) {
+      inner = byTour[t].map((c) => `<div class="bracket-single">${matchCard(c)}</div>`).join("");
+    } else {
+      // Regroupe les combats de ce tour par combat suivant commun (prochainCombatId), pour dessiner
+      // les traits de crochet reliant chaque paire au combat qui en découle — plutôt que de supposer
+      // un ordre pair/impair fragile dès qu'il y a des exempts ou du repêchage.
+      const groups = {};
+      const order = [];
+      byTour[t].forEach((c) => {
+        const key = c.prochainCombatId != null ? String(c.prochainCombatId) : `solo-${c.id}`;
+        if (!groups[key]) { groups[key] = []; order.push(key); }
+        groups[key].push(c);
+      });
+      order.sort((a, b) => {
+        const na = /^\d+$/.test(a) ? +a : Infinity, nb = /^\d+$/.test(b) ? +b : Infinity;
+        return na - nb;
+      });
+      inner = order.map((key) => {
+        const g = groups[key];
+        return g.length === 2
+          ? `<div class="bracket-pair">${g.map((c) => matchCard(c)).join("")}</div>`
+          : `<div class="bracket-single">${matchCard(g[0])}</div>`;
+      }).join("");
+    }
+    return `<div class="bracket-round${isLastCol ? "" : " has-next"}"><div class="round-label">${label}</div><div class="bracket-matches">${inner}</div></div>`;
   }).join("");
-  return `<div class="bracket">${cols}</div>`;
+
+  const finale = byTour[maxTour].length === 1 ? byTour[maxTour][0] : null;
+  const championNom = finale && finale.vainqueurCouleur ? (finale.vainqueurCouleur === "Aka" ? finale.aNom : finale.bNom) : null;
+  const championHtml = !isRepechage && championNom
+    ? `<div class="bracket-champion"><div class="trophy">🏆</div><div class="champion-label">Vainqueur</div><div class="champion-name">${esc(championNom)}</div></div>`
+    : "";
+
+  return `<div class="bracket">${cols}${championHtml}</div>`;
 }
 function matchCard(c) {
   function slot(nom, id, couleur, score, isWinner) {
@@ -565,7 +690,7 @@ async function screenTatamis() {
   </div>`;
 
   const selAire = aires.find((a) => a.id === selId);
-  if (selAire) html += await renderFileAttente(selAire);
+  if (selAire) { syncTatamiHash(selAire.id); html += await renderFileAttente(selAire); }
   return html;
 }
 
@@ -578,13 +703,94 @@ async function renderFileAttente(aire) {
       <td>${badgeStatut(c.statut)} <button class="btn btn-sm ${primary ? "btn-primary" : ""}" data-action="goto-confrontation" data-id="${c.id}" data-type="${c.type}">${c.type === "kumite" ? "Arbitrer" : "Juger"}</button></td></tr>`;
   }
   const aVenirRows = fa.aVenir.map((e) => row(e, "À venir")).join("");
-  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}</h3>
+  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}
+      <button class="btn btn-sm btn-ghost" data-action="copy-tatami-link" data-id="${aire.id}" type="button" style="margin-left:8px;">🔗 Copier le lien de ce poste</button>
+      <button class="btn btn-sm btn-ghost" data-action="copy-public-link" data-id="${aire.id}" type="button">📺 Copier le lien de l'écran public</button>
+    </h3>
+    <p class="hint" style="margin-top:-4px;">Le premier lien ramène toujours à la file d'attente de <b>${esc(aire.nom)}</b> (poste d'arbitrage) ; le second ouvre l'affichage plein écran pour TV/vidéoprojecteur — à mettre en favori sur l'appareil de ce tatami.</p>
     <div class="table-wrap"><table><thead><tr><th>Statut</th><th>Rencontre</th><th></th></tr></thead><tbody>
       ${row(fa.enCours, "En cours", true)}
       ${row(fa.suivant, "Suivant")}
       ${aVenirRows}
     </tbody></table></div>
   </div>`;
+}
+
+/* ---- Écran public (TV / vidéoprojecteur) ----
+   Poste indépendant, sans sidebar ni compétition active locale : tout part du seul aireId dans le
+   hash (#public/<id>), interrogé par polling — aucune dépendance à l'état du navigateur de l'arbitre. */
+let publicPollTimer = null;
+async function renderPublicScreen() {
+  if (publicPollTimer) { clearInterval(publicPollTimer); publicPollTimer = null; }
+  const aireId = routeState.publicAireId;
+  const app = document.getElementById("app");
+  app.innerHTML = '<div id="publicRoot" class="public-screen"><div class="public-wait">Chargement…</div></div>';
+
+  const tick = async () => {
+    if (currentRoute !== "public") { if (publicPollTimer) { clearInterval(publicPollTimer); publicPollTimer = null; } return; }
+    const root = document.getElementById("publicRoot");
+    if (!root) return;
+    try { root.innerHTML = renderPublicBody(await api.get(`/aires/${aireId}/file-attente`)); }
+    catch (e) { root.innerHTML = '<div class="public-wait">Connexion au poste central perdue — nouvelle tentative…</div>'; }
+  };
+  await tick();
+  publicPollTimer = setInterval(tick, 1000);
+}
+
+function publicChronoTxt(c) {
+  if (c.type !== "kumite" || c.chronoRestantMs == null) return null;
+  // SQLite ne conserve pas l'indicateur UTC sur les DateTime : le JSON revient sans suffixe "Z" une
+  // fois relu depuis la base — sans ça, `new Date(...)` l'interpréterait à tort en heure locale.
+  const remainingMs = c.chronoDemarreLeUtc
+    ? Math.max(0, c.chronoRestantMs - (Date.now() - new Date(c.chronoDemarreLeUtc + (c.chronoDemarreLeUtc.endsWith("Z") ? "" : "Z")).getTime()))
+    : c.chronoRestantMs;
+  const totalSec = Math.ceil(remainingMs / 1000);
+  const mm = Math.floor(totalSec / 60), ss = totalSec % 60;
+  return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
+}
+
+function publicPhotoFrame(participantId, couleur, sizePx) {
+  const img = participantId != null
+    ? `<img src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+    : "";
+  const sizeStyle = sizePx ? `style="width:${sizePx}px;height:${sizePx}px;"` : "";
+  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
+}
+function publicEvenements(evenements, couleur) {
+  const filtres = (evenements || []).filter((e) => e.couleur === (couleur === "aka" ? "Aka" : "Ao"));
+  if (!filtres.length) return '<div class="public-ev-empty">—</div>';
+  return filtres.slice(0, 6).map((e) => `<div class="public-ev ${e.kind}"><span class="public-ev-t">${esc(e.t)}</span><span class="public-ev-label">${esc(e.label)}</span></div>`).join("");
+}
+
+function renderPublicBody(fa) {
+  const entry = fa.enCours || fa.suivant;
+  if (!entry) {
+    return `<div class="public-aire">${esc(fa.aireNom)}</div><div class="public-wait">En attente du prochain combat…</div>`;
+  }
+  const c = entry.confrontation;
+  const chrono = publicChronoTxt(c);
+  const isKumite = c.type === "kumite";
+  const scoreHtml = isKumite
+    ? `<div class="public-scores"><div class="public-score aka">${c.scoreAka ?? 0}</div><div class="public-chrono">${chrono || "—:—"}</div><div class="public-score ao">${c.scoreAo ?? 0}</div></div>`
+    : `<div class="public-scores"><div class="public-score aka">${(c.votes || []).filter((v) => v.couleur === "Aka").length}</div><div class="public-chrono">VOTES</div><div class="public-score ao">${(c.votes || []).filter((v) => v.couleur === "Ao").length}</div></div>`;
+  const senshuAka = c.senshuCouleur === "Aka", senshuAo = c.senshuCouleur === "Ao";
+  return `
+    <div class="public-topline">${esc(fa.aireNom)} · ${esc(entry.categorieNom)}${fa.enCours ? "" : '<span class="public-tag-next">PROCHAIN COMBAT</span>'}</div>
+    <div class="public-competitors">
+      <div class="public-competitor aka">
+        ${publicPhotoFrame(c.aId, "aka")}
+        <div class="public-color">AKA${senshuAka ? '<span class="public-senshu">★ SENSHU</span>' : ""}</div>
+        <div class="public-name">${esc(c.aNom || "—")}</div><div class="public-club">${esc(c.aClub || "")}</div>
+        ${isKumite ? `<div class="public-ev-list">${publicEvenements(c.evenements, "aka")}</div>` : ""}
+      </div>
+      <div class="public-competitor ao">
+        ${publicPhotoFrame(c.bId, "ao")}
+        <div class="public-color">AO${senshuAo ? '<span class="public-senshu">★ SENSHU</span>' : ""}</div>
+        <div class="public-name">${esc(c.bNom || "—")}</div><div class="public-club">${esc(c.bClub || "")}</div>
+        ${isKumite ? `<div class="public-ev-list">${publicEvenements(c.evenements, "ao")}</div>` : ""}
+      </div>
+    </div>
+    ${scoreHtml}`;
 }
 
 /* ---- Arbitrage Kumite ---- */
@@ -939,7 +1145,7 @@ appEl.addEventListener("click", async (e) => {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;
     const code = demanderCodeAdminSiConfigure();
     if (code === undefined) return;
-    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "accueil"; }
     await renderApp(); return;
   }
   if (a === "restaurer-sauvegarde") {
@@ -961,12 +1167,20 @@ appEl.addEventListener("click", async (e) => {
   if (a === "close-inscrire") { routeState.inscrireId = null; await renderApp(); return; }
   if (a === "del-part") { await safe(() => api.del(`/participants/${btn.dataset.id}`)); await renderApp(); return; }
   if (a === "del-equipe") { await safe(() => api.del(`/equipes/${btn.dataset.id}`)); await renderApp(); return; }
+  if (a === "print-tableau") { window.print(); return; }
   if (a === "regen-tableau") {
     if (!confirm("Régénérer ce tableau ? Les résultats déjà saisis seront perdus.")) return;
     await safe(() => api.del(`/tableaux/${btn.dataset.tab}`)); await renderApp(); return;
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
   if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
+  if (a === "copy-tatami-link" || a === "copy-public-link") {
+    const kind = a === "copy-tatami-link" ? "tatami" : "public";
+    const url = location.origin + "#" + kind + "/" + btn.dataset.id;
+    try { await navigator.clipboard.writeText(url); toast("Lien copié : " + url); }
+    catch (e) { prompt("Copiez ce lien :", url); }
+    return;
+  }
   if (a === "save-aire-nom") {
     const input = document.querySelector(`.aire-nom-input[data-id="${btn.dataset.id}"]`);
     await safe(() => api.put(`/aires/${btn.dataset.id}`, { nom: input.value }));
@@ -991,12 +1205,14 @@ appEl.addEventListener("click", async (e) => {
     if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
     if (!(await safe(() => api.post(`/combats/${btn.dataset.conf}/demarrer`)))) return;
     t.running = true; t.runningSince = Date.now(); saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "chrono-pause") {
     const t = timers[btn.dataset.conf];
     t.remainingMs = chronoRemainingMs(t); t.running = false; t.runningSince = null;
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "chrono-reset") {
@@ -1004,6 +1220,7 @@ appEl.addEventListener("click", async (e) => {
     const totalSec = timers[btn.dataset.conf] ? timers[btn.dataset.conf].totalSec : comp.dureeCombatDefautSec;
     timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false, runningSince: null };
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, timers[btn.dataset.conf]);
     await renderApp(); return;
   }
   if (a === "chrono-duree") {
@@ -1014,6 +1231,7 @@ appEl.addEventListener("click", async (e) => {
     t.remainingMs = Math.max(0, t.remainingMs + (nextTotal - t.totalSec) * 1000);
     t.totalSec = nextTotal;
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "point") {
@@ -1047,6 +1265,16 @@ appEl.addEventListener("change", async (e) => {
     const kataId = Number(e.target.value);
     if (!kataId) return;
     await safe(() => api.post(`/kata-confrontations/${e.target.dataset.conf}/kata`, { couleur: e.target.dataset.couleur, kataId }));
+    await renderApp();
+  }
+  if (e.target.dataset.action === "upload-photo" || e.target.dataset.action === "upload-logo") {
+    const fichier = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!fichier) return;
+    const kind = e.target.dataset.action === "upload-photo" ? "participants" : "clubs";
+    const fd = new FormData();
+    fd.append("fichier", fichier);
+    if (await safe(() => apiUpload(`/${kind}/${e.target.dataset.id}/${kind === "participants" ? "photo" : "logo"}`, fd))) toast("Image importée.");
     await renderApp();
   }
 });
@@ -1107,5 +1335,6 @@ appEl.addEventListener("submit", async (e) => {
   await renderApp();
 });
 
+parseHashRoute();
 renderApp();
 })();

@@ -88,6 +88,25 @@ public class CombatEngineTests
         Assert.Equal(StatutCombat.Termine, combat.Statut);
     }
 
+    [Fact]
+    public void EnregistrerHantei_RefuseUnCombatQuiNAttendPasDeHantei()
+    {
+        var combat = NouveauCombatEnCours(); // ModeDecision est encore null, pas Hantei
+        Assert.Throws<InvalidOperationException>(() => CombatEngine.EnregistrerHantei(combat, Couleur.Aka));
+    }
+
+    [Fact]
+    public void EnregistrerHantei_RefuseUnCombatDejaTermine()
+    {
+        var combat = NouveauCombatEnCours();
+        combat.ScoreAka = 0;
+        combat.ScoreAo = 0;
+        CombatEngine.TerminerParFinDeTemps(combat, estEnPoule: false); // pose ModeDecision = Hantei, Statut reste EnCours
+        CombatEngine.EnregistrerHantei(combat, Couleur.Aka); // premier vote : légitime, termine le combat
+
+        Assert.Throws<InvalidOperationException>(() => CombatEngine.EnregistrerHantei(combat, Couleur.Ao)); // second vote : refusé
+    }
+
     [Theory]
     [InlineData(TypePenalite.Hansoku)]
     [InlineData(TypePenalite.Shikkaku)]

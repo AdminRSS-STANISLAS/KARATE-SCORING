@@ -3,6 +3,7 @@ using System;
 using FkcScoring.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,9 +11,11 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FkcScoring.Core.Data.Migrations
 {
     [DbContext(typeof(FkcScoringContext))]
-    partial class FkcScoringContextModelSnapshot : ModelSnapshot
+    [Migration("20260903103807_AddAiresAndDropCombatAire")]
+    partial class AddAiresAndDropCombatAire
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.19");
@@ -653,20 +656,6 @@ namespace FkcScoring.Core.Data.Migrations
                     b.HasIndex("TableauId");
 
                     b.ToTable("KataConfrontations");
-                });
-
-            modelBuilder.Entity("FkcScoring.Core.Data.Entities.Parametres", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AdminCodeHash")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Parametres");
                 });
 
             modelBuilder.Entity("FkcScoring.Core.Data.Entities.Participant", b =>

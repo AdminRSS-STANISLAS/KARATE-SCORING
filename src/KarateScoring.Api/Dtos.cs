@@ -37,9 +37,19 @@ public record ConfrontationDto(
     List<EvenementDto>? Evenements,
     string? Kata1Nom, string? Kata2Nom, int? NbJuges, List<VoteDto>? Votes);
 
-public record TableauDto(int Id, int CategorieId, string Format, List<ConfrontationDto> Confrontations);
+public record TableauDto(int Id, int CategorieId, string Format, List<ConfrontationDto> Confrontations, int? AireId, string? AireNom);
 
 public record GenererTableauRequest(string? FormatForce);
+
+public record AireDto(int Id, string Nom, int Ordre);
+public record CreateAireRequest(string Nom);
+public record RenameAireRequest(string Nom);
+public record AssignerAireRequest(int? AireId);
+
+public record FileAttenteEntryDto(string CategorieNom, ConfrontationDto Confrontation);
+public record FileAttenteDto(FileAttenteEntryDto? EnCours, FileAttenteEntryDto? Suivant, List<FileAttenteEntryDto> AVenir);
+
+public record NetworkInfoDto(int Port, List<string> Addresses);
 
 public record PointRequest(string Couleur, string Type, int TempsEcouleSec);
 public record PenaliteRequest(string Couleur, string Penalite, int TempsEcouleSec);
@@ -50,4 +60,9 @@ public record VoteRequest(int JugeNumero, string Couleur);
 
 public record ClassementDto(int Position, string? Medaille, string Nom, string Club);
 
-public record AuditDto(DateTime Horodatage, string EntiteType, int EntiteId, string Action, string? AncienneValeur, string? NouvelleValeur);
+public record AuditDto(DateTime Horodatage, string EntiteType, int EntiteId, string Action, string? AncienneValeur, string? NouvelleValeur, string? Utilisateur);
+
+public record SecuriteStatusDto(bool CodeConfigure);
+public record DefinirCodeRequest(string NouveauCode, string? AncienCode);
+public record ResetRequest(string? Code);
+public record RestaurerRequest(string? Code);

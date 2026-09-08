@@ -102,6 +102,9 @@ public static class CombatEngine
     /// <summary>Enregistre la décision arbitrale (vote de drapeaux Aka/Ao) en cas d'égalité hors poule.</summary>
     public static void EnregistrerHantei(Combat combat, Couleur vainqueur)
     {
+        if (combat.Statut != StatutCombat.EnCours || combat.ModeDecision != ModeDecision.Hantei)
+            throw new InvalidOperationException("Ce combat n'est pas en attente d'une décision Hantei.");
+
         combat.VainqueurCouleur = vainqueur;
         combat.ModeDecision = ModeDecision.Hantei;
         combat.Statut = StatutCombat.Termine;

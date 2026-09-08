@@ -3,6 +3,7 @@ using System;
 using FkcScoring.Core.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 
 #nullable disable
@@ -10,35 +11,14 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace FkcScoring.Core.Data.Migrations
 {
     [DbContext(typeof(FkcScoringContext))]
-    partial class FkcScoringContextModelSnapshot : ModelSnapshot
+    [Migration("20260903091306_AddConcurrencyTokens")]
+    partial class AddConcurrencyTokens
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder.HasAnnotation("ProductVersion", "9.0.19");
-
-            modelBuilder.Entity("FkcScoring.Core.Data.Entities.Aire", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("CompetitionId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("Nom")
-                        .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<int>("Ordre")
-                        .HasColumnType("INTEGER");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CompetitionId");
-
-                    b.ToTable("Aires");
-                });
 
             modelBuilder.Entity("FkcScoring.Core.Data.Entities.AuditLog", b =>
                 {
@@ -179,6 +159,9 @@ namespace FkcScoring.Core.Data.Migrations
                     b.Property<int>("Id")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("Aire")
+                        .HasColumnType("TEXT");
 
                     b.Property<string>("ArbitreNom")
                         .HasColumnType("TEXT");
@@ -655,20 +638,6 @@ namespace FkcScoring.Core.Data.Migrations
                     b.ToTable("KataConfrontations");
                 });
 
-            modelBuilder.Entity("FkcScoring.Core.Data.Entities.Parametres", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<string>("AdminCodeHash")
-                        .HasColumnType("TEXT");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("Parametres");
-                });
-
             modelBuilder.Entity("FkcScoring.Core.Data.Entities.Participant", b =>
                 {
                     b.Property<int>("Id")
@@ -714,9 +683,6 @@ namespace FkcScoring.Core.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int?>("AireId")
-                        .HasColumnType("INTEGER");
-
                     b.Property<int>("CategorieId")
                         .HasColumnType("INTEGER");
 
@@ -727,8 +693,6 @@ namespace FkcScoring.Core.Data.Migrations
                         .HasColumnType("INTEGER");
 
                     b.HasKey("Id");
-
-                    b.HasIndex("AireId");
 
                     b.HasIndex("CategorieId");
 
@@ -755,17 +719,6 @@ namespace FkcScoring.Core.Data.Migrations
                     b.HasIndex("ConfrontationId");
 
                     b.ToTable("VotesJuges");
-                });
-
-            modelBuilder.Entity("FkcScoring.Core.Data.Entities.Aire", b =>
-                {
-                    b.HasOne("FkcScoring.Core.Data.Entities.Competition", "Competition")
-                        .WithMany()
-                        .HasForeignKey("CompetitionId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("Competition");
                 });
 
             modelBuilder.Entity("FkcScoring.Core.Data.Entities.Categorie", b =>
@@ -969,18 +922,11 @@ namespace FkcScoring.Core.Data.Migrations
 
             modelBuilder.Entity("FkcScoring.Core.Data.Entities.Tableau", b =>
                 {
-                    b.HasOne("FkcScoring.Core.Data.Entities.Aire", "Aire")
-                        .WithMany()
-                        .HasForeignKey("AireId")
-                        .OnDelete(DeleteBehavior.SetNull);
-
                     b.HasOne("FkcScoring.Core.Data.Entities.Categorie", "Categorie")
                         .WithMany("Tableaux")
                         .HasForeignKey("CategorieId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("Aire");
 
                     b.Navigation("Categorie");
                 });

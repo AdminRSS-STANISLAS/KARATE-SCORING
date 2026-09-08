@@ -157,4 +157,79 @@ public class KataTableauServiceTests : IDisposable
         Assert.Equal(2, phaseElim.Count(c => c.Tour == 2));
         Assert.Equal(1, phaseElim.Count(c => c.Tour == 3));
     }
+
+    [Fact]
+    public void GenererPhaseEliminationApresPoules_CroiseLesPoules_EviteUnRematchEnDemiFinale()
+    {
+        var tableau = _service.GenererTableau(_categorieIndividuelId, ParticipantIds(6), Discipline.KataIndividuel, nbJuges: 5, seed: 1);
+        var poules = _db.KataConfrontations.Where(c => c.TableauId == tableau.Id).ToList();
+
+        (int Premier, int Deuxieme) ClasserEtJouer(int moitie)
+        {
+            var combatsMoitie = poules.Where(c => c.Moitie == moitie).ToList();
+            var ids = combatsMoitie.SelectMany(c => new[] { c.Participant1Id!.Value, c.Participant2Id!.Value }).Distinct().ToList();
+            foreach (var c in combatsMoitie)
+            {
+                c.Statut = StatutCombat.Termine;
+                c.VainqueurCouleur = ids.IndexOf(c.Participant1Id!.Value) < ids.IndexOf(c.Participant2Id!.Value) ? Couleur.Aka : Couleur.Ao;
+            }
+            return (ids[0], ids[1]);
+        }
+
+        var (p1, p2) = ClasserEtJouer(1);
+        var (q1, q2) = ClasserEtJouer(2);
+        _db.SaveChanges();
+
+        _service.GenererPhaseEliminationApresPoules(tableau.Id, Discipline.KataIndividuel, nbJuges: 5);
+
+        var demies = _db.KataConfrontations.Where(c => c.TableauId == tableau.Id && c.Tour == 2).ToList();
+        foreach (var demi in demies)
+        {
+            var paire = new[] { demi.Participant1Id, demi.Participant2Id };
+            Assert.False(paire.Contains(p1) && paire.Contains(p2), "Le 1er et le 2e de la même poule ne doivent pas se rencontrer en demi-finale.");
+            Assert.False(paire.Contains(q1) && paire.Contains(q2), "Le 1er et le 2e de la même poule ne doivent pas se rencontrer en demi-finale.");
+        }
+    }
+
+    [Fact]
+    public void TableauASix_DerouleEntierement_ProduitDeuxBronzes()
+    {
+        var tableau = _service.GenererTableau(_categorieIndividuelId, ParticipantIds(6), Discipline.KataIndividuel, nbJuges: 5, seed: 1);
+        var poules = _db.KataConfrontations.Where(c => c.TableauId == tableau.Id).ToList();
+        foreach (var c in poules)
+        {
+            c.Statut = StatutCombat.Termine;
+            c.VainqueurCouleur = Couleur.Aka;
+        }
+        _db.SaveChanges();
+
+        _service.GenererPhaseEliminationApresPoules(tableau.Id, Discipline.KataIndividuel, nbJuges: 5);
+
+        for (int garde = 0; garde < 10; garde++)
+        {
+            var jouables = _db.KataConfrontations
+                .Where(c => c.TableauId == tableau.Id && c.Statut == StatutCombat.EnAttente
+                    && c.Participant1Id != null && c.Participant2Id != null)
+                .ToList();
+            if (jouables.Count == 0) break;
+
+            foreach (var confrontation in jouables)
+            {
+                confrontation.Statut = StatutCombat.Termine;
+                confrontation.VainqueurCouleur = Couleur.Aka;
+                _service.EnregistrerResultat(confrontation, Discipline.KataIndividuel);
+            }
+        }
+
+        var calculator = new ClassementCalculator(_db);
+        var classement = calculator.CalculerEtEnregistrer(tableau.Id);
+
+        Assert.Contains(classement, c => c.Medaille == Medaille.Or);
+        Assert.Contains(classement, c => c.Medaille == Medaille.Argent);
+        Assert.Contains(classement, c => c.Medaille == Medaille.Bronze1);
+        Assert.Contains(classement, c => c.Medaille == Medaille.Bronze2);
+
+        var participantsMedailles = classement.Select(c => c.ParticipantId).ToList();
+        Assert.Equal(participantsMedailles.Count, participantsMedailles.Distinct().Count());
+    }
 }

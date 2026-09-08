@@ -15,6 +15,7 @@ public class FkcScoringContext : DbContext
     public DbSet<Equipe> Equipes => Set<Equipe>();
     public DbSet<EquipeMembre> EquipeMembres => Set<EquipeMembre>();
     public DbSet<Tableau> Tableaux => Set<Tableau>();
+    public DbSet<Aire> Aires => Set<Aire>();
     public DbSet<Combat> Combats => Set<Combat>();
     public DbSet<EvenementCombat> EvenementsCombat => Set<EvenementCombat>();
     public DbSet<Kata> Katas => Set<Kata>();
@@ -22,6 +23,7 @@ public class FkcScoringContext : DbContext
     public DbSet<VoteJuge> VotesJuges => Set<VoteJuge>();
     public DbSet<Classement> Classements => Set<Classement>();
     public DbSet<AuditLog> AuditLogs => Set<AuditLog>();
+    public DbSet<Parametres> Parametres => Set<Parametres>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -39,7 +41,40 @@ public class FkcScoringContext : DbContext
             .HasForeignKey(c => c.ProchainConfrontationId)
             .OnDelete(DeleteBehavior.Restrict);
 
+        // Supprimer une aire ne doit pas supprimer les tableaux qui y étaient affectés — juste les désassigner.
+        modelBuilder.Entity<Tableau>()
+            .HasOne(t => t.Aire)
+            .WithMany()
+            .HasForeignKey(t => t.AireId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Jeton de concurrence : détecte deux postes qui écrivent sur le même combat/confrontation
+        // en parallèle (ex. arbitre + poste de contrôle sur le même tatami).
+        modelBuilder.Entity<Combat>().Property(c => c.RowVersion).IsConcurrencyToken();
+        modelBuilder.Entity<KataConfrontation>().Property(c => c.RowVersion).IsConcurrencyToken();
+
         modelBuilder.Entity<Kata>().HasData(SeedKatas());
+    }
+
+    public override int SaveChanges(bool acceptAllChangesOnSuccess)
+    {
+        IncrementerVersionsDeConcurrence();
+        return base.SaveChanges(acceptAllChangesOnSuccess);
+    }
+
+    public override Task<int> SaveChangesAsync(bool acceptAllChangesOnSuccess, CancellationToken cancellationToken = default)
+    {
+        IncrementerVersionsDeConcurrence();
+        return base.SaveChangesAsync(acceptAllChangesOnSuccess, cancellationToken);
+    }
+
+    /// <summary>Incrémente RowVersion sur chaque Combat/KataConfrontation modifié, pour que le jeton de concurrence change à chaque écriture.</summary>
+    private void IncrementerVersionsDeConcurrence()
+    {
+        foreach (var entry in ChangeTracker.Entries<Combat>())
+            if (entry.State == EntityState.Modified) entry.Entity.RowVersion++;
+        foreach (var entry in ChangeTracker.Entries<KataConfrontation>())
+            if (entry.State == EntityState.Modified) entry.Entity.RowVersion++;
     }
 
     private static Kata[] SeedKatas()

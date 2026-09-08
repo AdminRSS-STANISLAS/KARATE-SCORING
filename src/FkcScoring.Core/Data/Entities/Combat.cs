@@ -6,7 +6,6 @@ public class Combat
     public int TableauId { get; set; }
     public Tableau? Tableau { get; set; }
     public int Tour { get; set; }
-    public string? Aire { get; set; }
 
     public int? CompetiteurAkaId { get; set; }
     public Participant? CompetiteurAka { get; set; }
@@ -21,6 +20,9 @@ public class Combat
     public Couleur? VainqueurCouleur { get; set; }
     public int? DureeReelleSec { get; set; }
     public StatutCombat Statut { get; set; } = StatutCombat.EnAttente;
+
+    /// <summary>Jeton de concurrence (incrémenté à chaque écriture) : détecte deux postes qui touchent le même combat en parallèle.</summary>
+    public int RowVersion { get; set; }
 
     /// <summary>Vrai si ce combat n'a pas été disputé car un des deux compétiteurs était exempté (bye).</summary>
     public bool EstBye { get; set; }

@@ -17,15 +17,8 @@ public class ResultatsController(FkcScoringContext db) : ControllerBase
         var tableau = await db.Tableaux.FirstOrDefaultAsync(t => t.CategorieId == categorieId);
         if (tableau == null) return Ok(new List<ClassementDto>());
 
-        var classement = new ClassementCalculator(db).CalculerEtEnregistrer(tableau.Id);
-        var ids = classement.Select(c => c.Id).ToList();
-        var avecNavs = await db.Classements
-            .Include(c => c.Participant).ThenInclude(p => p!.Club)
-            .Include(c => c.Equipe).ThenInclude(e => e!.Club)
-            .Where(c => ids.Contains(c.Id))
-            .OrderBy(c => c.Position)
-            .ToListAsync();
-        return avecNavs.Select(c => c.ToDto()).ToList();
+        var classement = new ClassementCalculator(db).Calculer(tableau.Id);
+        return classement.OrderBy(c => c.Position).Select(c => c.ToDto()).ToList();
     }
 
     [HttpGet("competitions/{competitionId}/export/kumite")]
@@ -90,12 +83,7 @@ public class ResultatsController(FkcScoringContext db) : ControllerBase
             var tableau = await db.Tableaux.FirstOrDefaultAsync(t => t.CategorieId == categorie.Id);
             if (tableau == null) continue;
             var classement = calculator.CalculerEtEnregistrer(tableau.Id);
-            var ids = classement.Select(c => c.Id).ToList();
-            var avecNavs = await db.Classements
-                .Include(c => c.Participant).ThenInclude(p => p!.Club)
-                .Include(c => c.Equipe).ThenInclude(e => e!.Club)
-                .Where(c => ids.Contains(c.Id)).ToListAsync();
-            resultats.Add((categorie, avecNavs));
+            resultats.Add((categorie, classement));
         }
 
         var xlsx = new ResultatsExcelExporter().Generer(competition, resultats);

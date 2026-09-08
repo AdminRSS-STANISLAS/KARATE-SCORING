@@ -10,9 +10,11 @@ const DISQUALIFIANTES = ["Hansoku", "Shikkaku", "Kiken"];
 
 /* ================= API ================= */
 async function apiFetch(method, path, body) {
+  const headers = body !== undefined ? { "Content-Type": "application/json" } : {};
+  if (operateurNom) headers["X-Operateur"] = operateurNom;
   const res = await fetch("/api" + path, {
     method,
-    headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
+    headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
   if (res.status === 204) return null;
@@ -32,6 +34,20 @@ const api = {
   put: (p, b) => apiFetch("PUT", p, b === undefined ? {} : b),
   del: (p) => apiFetch("DELETE", p),
 };
+/* Upload multipart (FormData) : distinct d'apiFetch, qui envoie toujours du JSON. */
+async function apiUpload(path, formData) {
+  const headers = {};
+  if (operateurNom) headers["X-Operateur"] = operateurNom;
+  const res = await fetch("/api" + path, { method: "POST", headers, body: formData });
+  const text = await res.text();
+  let data = null;
+  if (text) { try { data = JSON.parse(text); } catch (e) { data = text; } }
+  if (!res.ok) {
+    const msg = (data && typeof data === "object" && (data.detail || data.title)) || (typeof data === "string" ? data : null) || (res.status + " " + res.statusText);
+    throw new Error(msg);
+  }
+  return data;
+}
 async function safe(fn) {
   try { await fn(); return true; }
   catch (e) { toast(e.message || String(e), true); return false; }
@@ -39,16 +55,46 @@ async function safe(fn) {
 
 /* ================= State ================= */
 let activeCompetitionId = Number(localStorage.getItem("karate_scoring_active_competition")) || null;
+let operateurNom = localStorage.getItem("karate_scoring_operateur") || "";
 let currentRoute = "competitions";
 let routeState = {};
-let timers = {}; // chrono transient state keyed by combat id: {remainingMs, running}
+// Chrono par combat : { remainingMs, totalSec, running, runningSince }. remainingMs est le temps
+// restant "figé" au dernier point de contrôle (démarrage/pause/reset/réglage durée) ; pendant que
+// le chrono tourne, le temps réel affiché se calcule à partir de runningSince (horloge murale, voir
+// chronoRemainingMs) plutôt que d'être décrémenté à chaque tick — ça évite toute dérive cumulative
+// en cas d'onglet en arrière-plan ou de machine chargée, et ça permet de reconstituer le temps exact
+// après un rafraîchissement de page puisque runningSince est un horodatage absolu persisté.
+let timers = loadTimers();
 let competitionsCache = [];
+let networkInfoCache = null;
+let securiteCache = null;
+let sidebarOpen = false;
+
+function loadTimers() {
+  try { return JSON.parse(localStorage.getItem("karate_scoring_timers")) || {}; }
+  catch (e) { return {}; }
+}
+function saveTimers() {
+  try { localStorage.setItem("karate_scoring_timers", JSON.stringify(timers)); }
+  catch (e) { /* stockage indisponible : le chrono reste fonctionnel pour cet onglet, juste pas persistant */ }
+}
+function chronoRemainingMs(t) {
+  if (!t) return 0;
+  return t.running ? Math.max(0, t.remainingMs - (Date.now() - t.runningSince)) : t.remainingMs;
+}
 
 function setActiveCompetition(id) {
   activeCompetitionId = id;
   localStorage.setItem("karate_scoring_active_competition", id ? String(id) : "");
 }
 function activeComp() { return competitionsCache.find((c) => c.id === activeCompetitionId) || null; }
+
+/* Retourne le code saisi si un code admin est configuré, null si aucun n'est requis, ou undefined si l'utilisateur annule la saisie. */
+function demanderCodeAdminSiConfigure() {
+  if (!(securiteCache && securiteCache.codeConfigure)) return null;
+  const code = prompt("Code administrateur requis :");
+  return code == null ? undefined : code;
+}
 
 function toast(msg, isErr) {
   const wrap = document.getElementById("toastWrap");
@@ -149,19 +195,29 @@ const NAV = [
   { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組" },
   { sec: "Compétition" },
   { id: "tableaux", label: "Tableaux", ico: "⑂", kanji: "表" },
+  { id: "tatamis", label: "Tatamis", ico: "▣", kanji: "畳" },
   { id: "kumite", label: "Arbitrage Kumite", ico: "⚑", kanji: "組手" },
   { id: "kata", label: "Jury Kata", ico: "⚐", kanji: "型" },
   { sec: "Bilan" },
   { id: "resultats", label: "Résultats & exports", ico: "▦", kanji: "賞" },
   { id: "audit", label: "Journal d'audit", ico: "≣", kanji: "記録" },
+  { id: "securite", label: "Sécurité", ico: "⛨", kanji: "安全" },
 ];
 
 async function renderApp() {
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
+  if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
+  securiteCache = await api.get("/securite").catch(() => securiteCache);
 
   const app = document.getElementById("app");
-  app.innerHTML = renderSidebar() + '<main><div id="screenRoot"><div class="spinner-line">Chargement…</div></div></main>';
+  const comp = activeComp();
+  const mobileTopbar = `<div class="mobile-topbar">
+    <button class="hamburger" type="button" data-action="toggle-sidebar" aria-label="Menu">☰</button>
+    <span class="mt-comp">${comp ? esc(comp.nom) : "Karate Scoring"}</span>
+  </div>`;
+  app.innerHTML = mobileTopbar + renderSidebar() + `<div class="sidebar-backdrop${sidebarOpen ? " open" : ""}" data-action="close-sidebar"></div>` +
+    '<main><div id="screenRoot"><div class="spinner-line">Chargement…</div></div></main>';
 
   let html;
   try { html = await renderScreen(); }
@@ -176,12 +232,13 @@ function renderSidebar() {
     : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
   ).join("");
   return `
-  <nav class="sidebar">
+  <nav class="sidebar${sidebarOpen ? " open" : ""}">
     <div class="sidebar-brand"><div class="logo-badge"><img class="brand-logo" src="assets/karate-scoring-logo.jpg" alt="Karate Scoring"></div><div class="sub">Plateforme locale</div></div>
     <div class="sidebar-comp">Compétition active${comp ? `<b>${esc(comp.nom)}</b>` : '<b style="color:var(--sidebar-ink-dim);font-weight:500;">Aucune sélectionnée</b>'}</div>
     <ul class="nav">${navHtml}</ul>
     <div class="sidebar-partner"><img src="assets/fkc-logo.jpg" alt="Fouda Karate Club"><div class="ptxt">Partenaire fondateur<b>Fouda Karate Club</b></div></div>
     <div class="sidebar-foot">Application autonome, exécutée localement (Docker) — toutes les données restent sur ce poste.
+      ${networkInfoCache && networkInfoCache.addresses.length ? `<div class="hint" style="margin:6px 0;">Postes tatami — ouvrir : ${networkInfoCache.addresses.map((a) => `<code>http://${a}:${networkInfoCache.port}</code>`).join(", ")}</div>` : ""}
       <button data-action="seed-demo" type="button">Charger la démo</button>
       <button data-action="reset-all" type="button">Réinitialiser tout</button>
     </div>
@@ -201,10 +258,12 @@ async function renderScreen() {
     case "participants": return activeComp() ? await screenParticipants() : screenGuardNoComp();
     case "equipes": return activeComp() ? await screenEquipes() : screenGuardNoComp();
     case "tableaux": return activeComp() ? await screenTableaux() : screenGuardNoComp();
+    case "tatamis": return activeComp() ? await screenTatamis() : screenGuardNoComp();
     case "kumite": return activeComp() ? await screenKumite() : screenGuardNoComp();
     case "kata": return activeComp() ? await screenKata() : screenGuardNoComp();
     case "resultats": return activeComp() ? await screenResultats() : screenGuardNoComp();
     case "audit": return await screenAudit();
+    case "securite": return await screenSecurite();
     default: return await screenCompetitions();
   }
 }
@@ -401,26 +460,32 @@ async function screenTableaux() {
         ${cat.inscritsCount < 2 ? '<p class="hint">Il faut au moins 2 inscrits.</p>' : ""}
       </div>`;
     } else {
-      body = renderTableauBody(tableau, cat);
+      const aires = await api.get(`/competitions/${comp.id}/aires`);
+      body = renderTableauBody(tableau, cat, aires);
     }
   }
 
   return `<div class="topbar"><div><div class="crumb">${esc(comp.nom)}</div><h1>Tableaux de compétition</h1></div><select id="select-tableau-cat">${opts}</select></div>${body}`;
 }
 
-function renderTableauBody(tableau, cat) {
-  let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span><button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
+function renderTableauBody(tableau, cat, aires) {
+  const aireOpts = `<option value="">Aucune aire</option>` + (aires || []).map((a) => `<option value="${a.id}" ${tableau.aireId === a.id ? "selected" : ""}>${esc(a.nom)}</option>`).join("");
+  let html = `<div class="card"><h3>${esc(cat.nom)} <span class="muted">${FORMAT_LABEL[tableau.format]}</span>
+    <select data-action="assign-aire" data-tab="${tableau.id}" style="margin-left:10px;font-size:12px;">${aireOpts}</select>
+    <button class="btn btn-sm btn-ghost" data-action="regen-tableau" data-tab="${tableau.id}" type="button">Régénérer…</button></h3>`;
 
   if (tableau.format === "PouleUnique") {
     html += renderPouleTable(tableau.confrontations, null);
   } else if (tableau.format === "PoulePuisElimination") {
-    html += `<div class="grid grid-2">${renderPouleTable(tableau.confrontations.filter((c) => c.moitie === 1), "Poule 1")}${renderPouleTable(tableau.confrontations.filter((c) => c.moitie === 2), "Poule 2")}</div>`;
+    html += `<div class="grid grid-2">${renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1 && c.moitie === 1), "Poule 1")}${renderPouleTable(tableau.confrontations.filter((c) => c.tour === 1 && c.moitie === 2), "Poule 2")}</div>`;
     const poulesDone = tableau.confrontations.filter((c) => c.tour === 1).every((c) => c.statut === "Termine");
     const elimGenerated = tableau.confrontations.some((c) => c.tour >= 2);
     if (poulesDone && !elimGenerated) {
       html += `<button class="btn btn-primary btn-sm" data-action="gen-elim-apres-poules" data-tab="${tableau.id}" style="margin-top:6px;">Générer la phase à élimination directe</button>`;
     } else if (elimGenerated) {
       html += `<h4 style="margin:16px 0 8px;font-size:14px;">Phase à élimination directe</h4>${renderBracket(tableau.confrontations.filter((c) => c.tour >= 2 && !c.estRepechage))}`;
+      const rep = tableau.confrontations.filter((c) => c.estRepechage);
+      if (rep.length) html += `<h4 style="margin:16px 0 8px;font-size:14px;">Repêchage — deux médailles de bronze</h4>${renderBracket(rep, true)}`;
     } else {
       html += '<p class="hint" style="margin-top:8px;">Terminez toutes les rencontres de poule pour générer la phase finale.</p>';
     }
@@ -474,6 +539,54 @@ function matchCard(c) {
   return `<div class="match-card"${clickable}>${body}</div>`;
 }
 
+/* ---- Tatamis ---- */
+async function screenTatamis() {
+  const comp = activeComp();
+  const aires = await api.get(`/competitions/${comp.id}/aires`);
+  const selId = routeState.tatamiAireId || (aires[0] && aires[0].id);
+
+  const rows = aires.map((a) => `<tr>
+    <td><input type="text" class="aire-nom-input" data-id="${a.id}" value="${esc(a.nom)}" style="width:100%;"></td>
+    <td style="white-space:nowrap;">
+      <button class="btn btn-sm" data-action="save-aire-nom" data-id="${a.id}">Enregistrer</button>
+      <button class="btn btn-sm ${a.id === selId ? "btn-primary" : "btn-ghost"}" data-action="select-tatami" data-id="${a.id}">File d'attente</button>
+      <button class="btn btn-sm btn-ghost" data-action="del-aire" data-id="${a.id}">Supprimer</button>
+    </td></tr>`).join("");
+
+  let html = `<div class="topbar"><div><div class="crumb">${esc(comp.nom)}</div><h1>Tatamis</h1></div></div>
+  <div class="card"><h3>Nouvelle aire</h3>
+    <form id="form-aire" data-comp="${comp.id}" class="row-inline">
+      <div class="field" style="flex:1;margin-bottom:0;"><input type="text" name="nom" placeholder="Ex. Tatami 1" required></div>
+      <button class="btn btn-primary btn-sm" type="submit">Ajouter</button>
+    </form>
+  </div>
+  <div class="card"><h3>Aires <span class="muted">${aires.length}</span></h3>
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Nom</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Créez une aire pour répartir les tableaux entre plusieurs tatamis, puis assignez-les depuis l\'écran Tableaux.</p>'}
+  </div>`;
+
+  const selAire = aires.find((a) => a.id === selId);
+  if (selAire) html += await renderFileAttente(selAire);
+  return html;
+}
+
+async function renderFileAttente(aire) {
+  const fa = await api.get(`/aires/${aire.id}/file-attente`);
+  function row(entry, label, primary) {
+    if (!entry) return `<tr><td>${label}</td><td class="empty">—</td><td></td></tr>`;
+    const c = entry.confrontation;
+    return `<tr><td>${label}</td><td>${esc(entry.categorieNom)} <span class="hint">(${c.type === "kumite" ? "Kumite" : "Kata"})</span><br>${esc(c.aNom)} <span class="vs">vs</span> ${esc(c.bNom)}</td>
+      <td>${badgeStatut(c.statut)} <button class="btn btn-sm ${primary ? "btn-primary" : ""}" data-action="goto-confrontation" data-id="${c.id}" data-type="${c.type}">${c.type === "kumite" ? "Arbitrer" : "Juger"}</button></td></tr>`;
+  }
+  const aVenirRows = fa.aVenir.map((e) => row(e, "À venir")).join("");
+  return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}</h3>
+    <div class="table-wrap"><table><thead><tr><th>Statut</th><th>Rencontre</th><th></th></tr></thead><tbody>
+      ${row(fa.enCours, "En cours", true)}
+      ${row(fa.suivant, "Suivant")}
+      ${aVenirRows}
+    </tbody></table></div>
+  </div>`;
+}
+
 /* ---- Arbitrage Kumite ---- */
 async function kumiteEligibleConfs(comp) {
   const cats = await api.get(`/competitions/${comp.id}/categories`);
@@ -504,9 +617,10 @@ async function screenKumite() {
 
 function renderKumiteScoreboard(c, cat, tableauFormat, comp) {
   const enPoule = tableauFormat === "PouleUnique" || (tableauFormat === "PoulePuisElimination" && c.tour === 1);
+  if (c.statut === "Termine" && timers[c.id]) { delete timers[c.id]; saveTimers(); } // plus de chrono actif à conserver une fois le combat clos
   let t = timers[c.id];
-  if (!t && c.statut !== "Termine") t = timers[c.id] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false };
-  const remainingSec = t ? Math.ceil(t.remainingMs / 1000) : 0;
+  if (!t && c.statut !== "Termine") t = timers[c.id] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
+  const remainingSec = t ? Math.ceil(chronoRemainingMs(t) / 1000) : 0;
   const mm = Math.floor(remainingSec / 60), ss = remainingSec % 60;
   const chronoTxt = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 
@@ -572,16 +686,18 @@ function renderKumiteScoreboard(c, cat, tableauFormat, comp) {
 }
 
 /* Boucle de chrono — 100 ms, purement côté client ; le serveur n'apprend le temps écoulé qu'au
-   moment d'une action (point/pénalité/fin de temps) via tempsEcouleSec. */
+   moment d'une action (point/pénalité/fin de temps) via tempsEcouleSec. Le temps restant se calcule
+   à chaque tick à partir de l'horloge murale (chronoRemainingMs), pas d'un décrément cumulé : un
+   tick en retard (onglet en arrière-plan, machine chargée) ne fait donc dériver aucun combat. */
 setInterval(async () => {
   let any = false;
   for (const id of Object.keys(timers)) {
     const t = timers[id];
     if (t.running) {
       any = true;
-      t.remainingMs = Math.max(0, t.remainingMs - 100);
-      if (t.remainingMs <= 0) {
-        t.running = false;
+      if (chronoRemainingMs(t) <= 0) {
+        t.remainingMs = 0; t.running = false; t.runningSince = null;
+        saveTimers();
         await safe(() => api.post(`/combats/${id}/fin-de-temps`, { tempsEcouleSec: t.totalSec }));
         if (currentRoute === "kumite") await renderApp();
       }
@@ -597,9 +713,9 @@ function liveUpdateChrono() {
   if (!t) return;
   const el = document.getElementById("chronoDisplay");
   if (!el) return;
-  const remainingSec = Math.ceil(t.remainingMs / 1000);
+  const remainingSec = Math.ceil(chronoRemainingMs(t) / 1000);
   const mm = Math.floor(remainingSec / 60), ss = remainingSec % 60;
-  el.textContent = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "");
+  el.textContent = (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
   el.classList.toggle("low", remainingSec <= 15);
 }
 
@@ -694,10 +810,65 @@ async function screenResultats() {
 /* ---- Audit ---- */
 async function screenAudit() {
   const logs = await api.get("/audit");
-  const rows = logs.map((a) => `<tr><td class="num" style="white-space:nowrap;color:var(--ink-soft);">${new Date(a.horodatage).toLocaleString("fr-FR")}</td><td>${esc(a.entiteType)} #${a.entiteId} — ${esc(a.action)}${a.nouvelleValeur ? " : " + esc(a.nouvelleValeur) : ""}</td></tr>`).join("");
+  const rows = logs.map((a) => `<tr><td class="num" style="white-space:nowrap;color:var(--ink-soft);">${new Date(a.horodatage).toLocaleString("fr-FR")}</td><td>${esc(a.entiteType)} #${a.entiteId} — ${esc(a.action)}${a.nouvelleValeur ? " : " + esc(a.nouvelleValeur) : ""}</td><td>${esc(a.utilisateur || "—")}</td></tr>`).join("");
   return `<div class="topbar"><div><div class="crumb">Traçabilité</div><h1>Journal d'audit</h1></div></div>
   <div class="card"><h3>Modifications de score et décisions <span class="muted">${logs.length} entrées</span></h3>
-    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Horodatage</th><th>Événement</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun événement enregistré.</p>'}
+    ${rows ? `<div class="table-wrap"><table><thead><tr><th>Horodatage</th><th>Événement</th><th>Opérateur</th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucun événement enregistré.</p>'}
+  </div>`;
+}
+
+/* ---- Sécurité ---- */
+async function screenSecurite() {
+  const configure = !!(securiteCache && securiteCache.codeConfigure);
+  return `<div class="topbar"><div><div class="crumb">Plateforme</div><h1>Sécurité</h1></div></div>
+
+  <div class="card"><h3>Nom d'opérateur (ce poste)</h3>
+    <p class="hint" style="margin-bottom:10px;">Enregistré dans le journal d'audit pour chaque action effectuée depuis cet appareil.</p>
+    <form id="form-operateur" class="row-inline">
+      <div class="field" style="flex:1;margin-bottom:0;"><input type="text" name="nom" placeholder="Ex. Jean" value="${esc(operateurNom)}"></div>
+      <button class="btn btn-primary btn-sm" type="submit">Enregistrer</button>
+    </form>
+  </div>
+
+  <div class="card"><h3>Code administrateur</h3>
+    ${configure
+      ? '<p class="hint" style="margin-bottom:10px;">Un code est configuré : il sera demandé pour réinitialiser toutes les données de la plateforme.</p>'
+      : '<p class="error" style="margin-bottom:10px;">Aucun code configuré — n\'importe quel poste sur le réseau local peut actuellement réinitialiser toutes les données. Configurez-en un ci-dessous.</p>'}
+    <form id="form-code-admin" class="grid grid-3">
+      ${configure ? field("Code actuel", "ancienCode", "password", "", true) : ""}
+      ${field(configure ? "Nouveau code" : "Code (min. 4 caractères)", "nouveauCode", "password", "", true)}
+      <div></div>
+      <div style="grid-column:1/-1"><button class="btn btn-primary btn-sm" type="submit">${configure ? "Changer le code" : "Configurer le code"}</button></div>
+    </form>
+  </div>
+
+  ${await renderSauvegardes()}`;
+}
+
+/* ---- Sauvegardes ---- */
+function fmtTaille(octets) {
+  if (octets < 1024) return octets + " o";
+  if (octets < 1024 * 1024) return (octets / 1024).toFixed(0) + " Ko";
+  return (octets / (1024 * 1024)).toFixed(1) + " Mo";
+}
+
+async function renderSauvegardes() {
+  const sauvegardes = await api.get("/sauvegardes").catch(() => []);
+  const rows = sauvegardes.map((s) => `<tr><td>${esc(s.nom)}</td><td>${new Date(s.creeLe).toLocaleString("fr-FR")}</td><td>${fmtTaille(s.tailleOctets)}</td>
+    <td><button class="btn btn-sm btn-danger" data-action="restaurer-sauvegarde" data-nom="${esc(s.nom)}">Restaurer</button></td></tr>`).join("");
+
+  return `<div class="card"><h3>Sauvegardes</h3>
+    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste.</p>
+    <a class="btn btn-primary btn-sm" href="/api/sauvegardes/telecharger" download>Télécharger une sauvegarde maintenant</a>
+    ${rows ? `<div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Fichier</th><th>Créée le</th><th>Taille</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucune sauvegarde pour l\'instant.</p>'}
+    <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;">
+      <h4 style="font-size:13px;margin-bottom:8px;">Importer une sauvegarde externe</h4>
+      <p class="error" style="margin-bottom:10px;">Remplace immédiatement toutes les données actuelles (une sauvegarde de l'état présent est prise automatiquement avant).</p>
+      <form id="form-importer-sauvegarde" class="row-inline">
+        <input type="file" name="fichier" accept=".db" required>
+        <button class="btn btn-sm btn-danger" type="submit">Importer et restaurer</button>
+      </form>
+    </div>
   </div>`;
 }
 
@@ -754,17 +925,28 @@ const appEl = document.getElementById("app");
 
 appEl.addEventListener("click", async (e) => {
   const navEl = e.target.closest("[data-nav]");
-  if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; await renderApp(); return; }
+  if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; sidebarOpen = false; await renderApp(); return; }
 
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
   e.preventDefault();
   const a = btn.dataset.action;
 
+  if (a === "toggle-sidebar") { sidebarOpen = !sidebarOpen; await renderApp(); return; }
+  if (a === "close-sidebar") { sidebarOpen = false; await renderApp(); return; }
   if (a === "seed-demo") { await safe(seedDemo); return; }
   if (a === "reset-all") {
     if (!confirm("Réinitialiser toutes les données de la plateforme ? Cette action supprime définitivement compétitions, participants et résultats.")) return;
-    if (await safe(() => api.post("/admin/reset"))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) return;
+    if (await safe(() => api.post("/admin/reset", { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; currentRoute = "competitions"; }
+    await renderApp(); return;
+  }
+  if (a === "restaurer-sauvegarde") {
+    if (!confirm(`Restaurer « ${btn.dataset.nom} » ? Toutes les données actuelles seront remplacées (une sauvegarde de l'état présent est prise avant).`)) return;
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) return;
+    if (await safe(() => api.post(`/sauvegardes/${encodeURIComponent(btn.dataset.nom)}/restaurer`, { code }))) { setActiveCompetition(null); routeState = {}; timers = {}; }
     await renderApp(); return;
   }
   if (a === "activer-comp") { setActiveCompetition(Number(btn.dataset.id)); await renderApp(); return; }
@@ -784,6 +966,17 @@ appEl.addEventListener("click", async (e) => {
     await safe(() => api.del(`/tableaux/${btn.dataset.tab}`)); await renderApp(); return;
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
+  if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
+  if (a === "save-aire-nom") {
+    const input = document.querySelector(`.aire-nom-input[data-id="${btn.dataset.id}"]`);
+    await safe(() => api.put(`/aires/${btn.dataset.id}`, { nom: input.value }));
+    await renderApp(); return;
+  }
+  if (a === "del-aire") {
+    if (!confirm("Supprimer cette aire ? Les tableaux qui y sont assignés seront désassignés.")) return;
+    if (await safe(() => api.del(`/aires/${btn.dataset.id}`)) && routeState.tatamiAireId === Number(btn.dataset.id)) routeState.tatamiAireId = null;
+    await renderApp(); return;
+  }
   if (a === "goto-confrontation") {
     if (btn.dataset.type === "kumite") { routeState.kumiteConfId = Number(btn.dataset.id); currentRoute = "kumite"; }
     else { routeState.kataConfId = Number(btn.dataset.id); currentRoute = "kata"; }
@@ -795,15 +988,22 @@ appEl.addEventListener("click", async (e) => {
   if (a === "chrono-start") {
     const comp = activeComp();
     let t = timers[btn.dataset.conf];
-    if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false };
+    if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
     if (!(await safe(() => api.post(`/combats/${btn.dataset.conf}/demarrer`)))) return;
-    t.running = true; await renderApp(); return;
+    t.running = true; t.runningSince = Date.now(); saveTimers();
+    await renderApp(); return;
   }
-  if (a === "chrono-pause") { timers[btn.dataset.conf].running = false; await renderApp(); return; }
+  if (a === "chrono-pause") {
+    const t = timers[btn.dataset.conf];
+    t.remainingMs = chronoRemainingMs(t); t.running = false; t.runningSince = null;
+    saveTimers();
+    await renderApp(); return;
+  }
   if (a === "chrono-reset") {
     const comp = activeComp();
     const totalSec = timers[btn.dataset.conf] ? timers[btn.dataset.conf].totalSec : comp.dureeCombatDefautSec;
-    timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false };
+    timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false, runningSince: null };
+    saveTimers();
     await renderApp(); return;
   }
   if (a === "chrono-duree") {
@@ -813,17 +1013,18 @@ appEl.addEventListener("click", async (e) => {
     const nextTotal = Math.max(30, t.totalSec + delta);
     t.remainingMs = Math.max(0, t.remainingMs + (nextTotal - t.totalSec) * 1000);
     t.totalSec = nextTotal;
+    saveTimers();
     await renderApp(); return;
   }
   if (a === "point") {
     const t = timers[btn.dataset.conf];
-    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(t.remainingMs / 1000)) : 0;
+    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(chronoRemainingMs(t) / 1000)) : 0;
     await safe(() => api.post(`/combats/${btn.dataset.conf}/point`, { couleur: btn.dataset.couleur, type: btn.dataset.type, tempsEcouleSec }));
     await renderApp(); return;
   }
   if (a === "penalite") {
     const t = timers[btn.dataset.conf];
-    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(t.remainingMs / 1000)) : 0;
+    const tempsEcouleSec = t ? Math.max(0, t.totalSec - Math.ceil(chronoRemainingMs(t) / 1000)) : 0;
     await safe(() => api.post(`/combats/${btn.dataset.conf}/penalite`, { couleur: btn.dataset.couleur, penalite: btn.dataset.pen, tempsEcouleSec }));
     await renderApp(); return;
   }
@@ -838,6 +1039,10 @@ appEl.addEventListener("click", async (e) => {
 
 appEl.addEventListener("change", async (e) => {
   if (e.target.id === "select-tableau-cat") { routeState.tableauCatId = Number(e.target.value); await renderApp(); return; }
+  if (e.target.dataset.action === "assign-aire") {
+    await safe(() => api.post(`/tableaux/${e.target.dataset.tab}/aire`, { aireId: e.target.value ? Number(e.target.value) : null }));
+    await renderApp(); return;
+  }
   if (e.target.dataset.action === "set-kata") {
     const kataId = Number(e.target.value);
     if (!kataId) return;
@@ -880,6 +1085,24 @@ appEl.addEventListener("submit", async (e) => {
     await safe(() => api.post(`/competitions/${form.dataset.comp}/equipes`, { nom: f.get("nom"), club: f.get("club"), membreIds, categorieId: f.get("categorieId") ? Number(f.get("categorieId")) : null }));
   } else if (form.id === "form-gen-tableau") {
     await safe(() => api.post(`/categories/${form.dataset.cat}/tableau/generer`, { formatForce: f.get("force") || null }));
+  } else if (form.id === "form-aire") {
+    const v = (f.get("nom") || "").trim();
+    if (v) await safe(() => api.post(`/competitions/${form.dataset.comp}/aires`, { nom: v }));
+  } else if (form.id === "form-operateur") {
+    operateurNom = (f.get("nom") || "").trim();
+    localStorage.setItem("karate_scoring_operateur", operateurNom);
+    toast("Nom d'opérateur enregistré.");
+  } else if (form.id === "form-code-admin") {
+    const ok = await safe(() => api.post("/securite/code", { nouveauCode: f.get("nouveauCode"), ancienCode: f.get("ancienCode") || null }));
+    if (ok) { securiteCache = await api.get("/securite").catch(() => securiteCache); toast("Code administrateur enregistré."); }
+  } else if (form.id === "form-importer-sauvegarde") {
+    const fichier = f.get("fichier");
+    if (!fichier || !fichier.size) { toast("Sélectionnez un fichier de sauvegarde.", true); await renderApp(); return; }
+    if (!confirm(`Importer « ${fichier.name} » ? Toutes les données actuelles seront remplacées (une sauvegarde de l'état présent est prise avant).`)) { await renderApp(); return; }
+    const code = demanderCodeAdminSiConfigure();
+    if (code === undefined) { await renderApp(); return; }
+    if (code) f.set("code", code);
+    if (await safe(() => apiUpload("/sauvegardes/importer", f))) { setActiveCompetition(null); routeState = {}; timers = {}; toast("Sauvegarde importée."); }
   }
   await renderApp();
 });

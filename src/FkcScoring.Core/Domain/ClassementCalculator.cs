@@ -1,27 +1,63 @@
 using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using Microsoft.EntityFrameworkCore;
 
 namespace FkcScoring.Core.Domain;
 
-/// <summary>Calcule et enregistre le classement final d'une catégorie une fois son tableau terminé (Kumite ou Kata).</summary>
+/// <summary>Calcule (et éventuellement enregistre) le classement d'une catégorie à partir de son tableau.</summary>
 public class ClassementCalculator
 {
     private readonly FkcScoringContext _db;
 
     public ClassementCalculator(FkcScoringContext db) => _db = db;
 
+    /// <summary>Calcule le classement sans rien écrire en base — à utiliser pour un simple affichage (un tableau non terminé donne un classement partiel).</summary>
+    public List<Classement> Calculer(int tableauId)
+    {
+        var resultats = CalculerSansPersister(tableauId, out _);
+        ChargerNavigations(resultats);
+        return resultats;
+    }
+
+    /// <summary>Calcule et enregistre le classement (remplace le classement précédemment enregistré pour cette catégorie) — à réserver aux moments où le résultat doit être conservé durablement (export).</summary>
     public List<Classement> CalculerEtEnregistrer(int tableauId)
     {
-        var tableau = _db.Tableaux.Single(t => t.Id == tableauId);
-        var categorie = _db.Categories.Single(c => c.Id == tableau.CategorieId);
-        var resultats = categorie.Discipline == Discipline.KumiteIndividuel
-            ? CalculerKumite(tableau)
-            : CalculerKata(tableau, categorie.Discipline);
+        var resultats = CalculerSansPersister(tableauId, out var tableau);
 
         _db.Classements.RemoveRange(_db.Classements.Where(c => c.CategorieId == tableau.CategorieId));
         _db.Classements.AddRange(resultats);
         _db.SaveChanges();
+
+        ChargerNavigations(resultats);
         return resultats;
+    }
+
+    private List<Classement> CalculerSansPersister(int tableauId, out Tableau tableau)
+    {
+        var t = _db.Tableaux.Single(x => x.Id == tableauId);
+        tableau = t;
+        var categorie = _db.Categories.Single(c => c.Id == t.CategorieId);
+        return categorie.Discipline == Discipline.KumiteIndividuel
+            ? CalculerKumite(t)
+            : CalculerKata(t, categorie.Discipline);
+    }
+
+    /// <summary>Charge Participant/Equipe (avec Club) sur des résultats en mémoire, sans passer par la table Classements.</summary>
+    private void ChargerNavigations(List<Classement> resultats)
+    {
+        var participantIds = resultats.Where(r => r.ParticipantId != null).Select(r => r.ParticipantId!.Value).Distinct().ToList();
+        var equipeIds = resultats.Where(r => r.EquipeId != null).Select(r => r.EquipeId!.Value).Distinct().ToList();
+
+        var participants = participantIds.Count == 0 ? new Dictionary<int, Participant>()
+            : _db.Participants.Include(p => p.Club).Where(p => participantIds.Contains(p.Id)).ToDictionary(p => p.Id);
+        var equipes = equipeIds.Count == 0 ? new Dictionary<int, Equipe>()
+            : _db.Equipes.Include(e => e.Club).Where(e => equipeIds.Contains(e.Id)).ToDictionary(e => e.Id);
+
+        foreach (var r in resultats)
+        {
+            if (r.ParticipantId != null && participants.TryGetValue(r.ParticipantId.Value, out var p)) r.Participant = p;
+            if (r.EquipeId != null && equipes.TryGetValue(r.EquipeId.Value, out var e)) r.Equipe = e;
+        }
     }
 
     // ==================== Kumite ====================

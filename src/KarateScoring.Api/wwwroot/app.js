@@ -63,8 +63,10 @@ let routeState = {};
    toutes et retombe toujours sur sa propre file d'attente, même après une coupure Wi-Fi/veille qui
    aurait sinon perdu la sélection d'aire (jusque-là gardée seulement en mémoire JS, jamais dans l'URL). */
 function parseHashRoute() {
-  const m = /^#tatami\/(\d+)$/.exec(location.hash);
-  if (m) { currentRoute = "tatamis"; routeState.tatamiAireId = Number(m[1]); }
+  const mTatami = /^#tatami\/(\d+)$/.exec(location.hash);
+  if (mTatami) { currentRoute = "tatamis"; routeState.tatamiAireId = Number(mTatami[1]); return; }
+  const mPublic = /^#public\/(\d+)$/.exec(location.hash);
+  if (mPublic) { currentRoute = "public"; routeState.publicAireId = Number(mPublic[1]); }
 }
 function syncTatamiHash(aireId) {
   const wanted = "#tatami/" + aireId;
@@ -94,6 +96,11 @@ function saveTimers() {
 function chronoRemainingMs(t) {
   if (!t) return 0;
   return t.running ? Math.max(0, t.remainingMs - (Date.now() - t.runningSince)) : t.remainingMs;
+}
+/* Miroise l'état du chrono côté serveur (démarré/en pause + temps restant) pour qu'un écran public
+   sur un autre appareil puisse le reconstruire par polling — best-effort, ne bloque jamais l'arbitre. */
+function syncChronoServeur(confId, t) {
+  api.post(`/combats/${confId}/chrono-sync`, { running: !!(t && t.running), remainingMs: chronoRemainingMs(t) }).catch(() => {});
 }
 
 function setActiveCompetition(id) {
@@ -218,6 +225,7 @@ const NAV = [
 ];
 
 async function renderApp() {
+  if (currentRoute === "public") { await renderPublicScreen(); return; }
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
@@ -628,14 +636,67 @@ async function renderFileAttente(aire) {
   const aVenirRows = fa.aVenir.map((e) => row(e, "À venir")).join("");
   return `<div class="card"><h3>File d'attente — ${esc(aire.nom)}
       <button class="btn btn-sm btn-ghost" data-action="copy-tatami-link" data-id="${aire.id}" type="button" style="margin-left:8px;">🔗 Copier le lien de ce poste</button>
+      <button class="btn btn-sm btn-ghost" data-action="copy-public-link" data-id="${aire.id}" type="button">📺 Copier le lien de l'écran public</button>
     </h3>
-    <p class="hint" style="margin-top:-4px;">Ce lien ramène toujours directement à la file d'attente de <b>${esc(aire.nom)}</b> — à mettre en favori sur l'appareil de ce tatami.</p>
+    <p class="hint" style="margin-top:-4px;">Le premier lien ramène toujours à la file d'attente de <b>${esc(aire.nom)}</b> (poste d'arbitrage) ; le second ouvre l'affichage plein écran pour TV/vidéoprojecteur — à mettre en favori sur l'appareil de ce tatami.</p>
     <div class="table-wrap"><table><thead><tr><th>Statut</th><th>Rencontre</th><th></th></tr></thead><tbody>
       ${row(fa.enCours, "En cours", true)}
       ${row(fa.suivant, "Suivant")}
       ${aVenirRows}
     </tbody></table></div>
   </div>`;
+}
+
+/* ---- Écran public (TV / vidéoprojecteur) ----
+   Poste indépendant, sans sidebar ni compétition active locale : tout part du seul aireId dans le
+   hash (#public/<id>), interrogé par polling — aucune dépendance à l'état du navigateur de l'arbitre. */
+let publicPollTimer = null;
+async function renderPublicScreen() {
+  if (publicPollTimer) { clearInterval(publicPollTimer); publicPollTimer = null; }
+  const aireId = routeState.publicAireId;
+  const app = document.getElementById("app");
+  app.innerHTML = '<div id="publicRoot" class="public-screen"><div class="public-wait">Chargement…</div></div>';
+
+  const tick = async () => {
+    if (currentRoute !== "public") { if (publicPollTimer) { clearInterval(publicPollTimer); publicPollTimer = null; } return; }
+    const root = document.getElementById("publicRoot");
+    if (!root) return;
+    try { root.innerHTML = renderPublicBody(await api.get(`/aires/${aireId}/file-attente`)); }
+    catch (e) { root.innerHTML = '<div class="public-wait">Connexion au poste central perdue — nouvelle tentative…</div>'; }
+  };
+  await tick();
+  publicPollTimer = setInterval(tick, 1000);
+}
+
+function publicChronoTxt(c) {
+  if (c.type !== "kumite" || c.chronoRestantMs == null) return null;
+  // SQLite ne conserve pas l'indicateur UTC sur les DateTime : le JSON revient sans suffixe "Z" une
+  // fois relu depuis la base — sans ça, `new Date(...)` l'interpréterait à tort en heure locale.
+  const remainingMs = c.chronoDemarreLeUtc
+    ? Math.max(0, c.chronoRestantMs - (Date.now() - new Date(c.chronoDemarreLeUtc + (c.chronoDemarreLeUtc.endsWith("Z") ? "" : "Z")).getTime()))
+    : c.chronoRestantMs;
+  const totalSec = Math.ceil(remainingMs / 1000);
+  const mm = Math.floor(totalSec / 60), ss = totalSec % 60;
+  return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
+}
+
+function renderPublicBody(fa) {
+  const entry = fa.enCours || fa.suivant;
+  if (!entry) {
+    return `<div class="public-aire">${esc(fa.aireNom)}</div><div class="public-wait">En attente du prochain combat…</div>`;
+  }
+  const c = entry.confrontation;
+  const chrono = publicChronoTxt(c);
+  const scoreHtml = c.type === "kumite"
+    ? `<div class="public-scores"><div class="public-score aka">${c.scoreAka ?? 0}</div><div class="public-chrono">${chrono || "—:—"}</div><div class="public-score ao">${c.scoreAo ?? 0}</div></div>`
+    : `<div class="public-scores"><div class="public-score aka">${(c.votes || []).filter((v) => v.couleur === "Aka").length}</div><div class="public-chrono">VOTES</div><div class="public-score ao">${(c.votes || []).filter((v) => v.couleur === "Ao").length}</div></div>`;
+  return `
+    <div class="public-topline">${esc(fa.aireNom)} · ${esc(entry.categorieNom)}${fa.enCours ? "" : '<span class="public-tag-next">PROCHAIN COMBAT</span>'}</div>
+    <div class="public-competitors">
+      <div class="public-competitor aka"><div class="public-color">AKA</div><div class="public-name">${esc(c.aNom || "—")}</div><div class="public-club">${esc(c.aClub || "")}</div></div>
+      <div class="public-competitor ao"><div class="public-color">AO</div><div class="public-name">${esc(c.bNom || "—")}</div><div class="public-club">${esc(c.bClub || "")}</div></div>
+    </div>
+    ${scoreHtml}`;
 }
 
 /* ---- Arbitrage Kumite ---- */
@@ -1019,8 +1080,9 @@ appEl.addEventListener("click", async (e) => {
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
   if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
-  if (a === "copy-tatami-link") {
-    const url = location.origin + "#tatami/" + btn.dataset.id;
+  if (a === "copy-tatami-link" || a === "copy-public-link") {
+    const kind = a === "copy-tatami-link" ? "tatami" : "public";
+    const url = location.origin + "#" + kind + "/" + btn.dataset.id;
     try { await navigator.clipboard.writeText(url); toast("Lien copié : " + url); }
     catch (e) { prompt("Copiez ce lien :", url); }
     return;
@@ -1049,12 +1111,14 @@ appEl.addEventListener("click", async (e) => {
     if (!t) t = timers[btn.dataset.conf] = { remainingMs: comp.dureeCombatDefautSec * 1000, totalSec: comp.dureeCombatDefautSec, running: false, runningSince: null };
     if (!(await safe(() => api.post(`/combats/${btn.dataset.conf}/demarrer`)))) return;
     t.running = true; t.runningSince = Date.now(); saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "chrono-pause") {
     const t = timers[btn.dataset.conf];
     t.remainingMs = chronoRemainingMs(t); t.running = false; t.runningSince = null;
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "chrono-reset") {
@@ -1062,6 +1126,7 @@ appEl.addEventListener("click", async (e) => {
     const totalSec = timers[btn.dataset.conf] ? timers[btn.dataset.conf].totalSec : comp.dureeCombatDefautSec;
     timers[btn.dataset.conf] = { remainingMs: totalSec * 1000, totalSec, running: false, runningSince: null };
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, timers[btn.dataset.conf]);
     await renderApp(); return;
   }
   if (a === "chrono-duree") {
@@ -1072,6 +1137,7 @@ appEl.addEventListener("click", async (e) => {
     t.remainingMs = Math.max(0, t.remainingMs + (nextTotal - t.totalSec) * 1000);
     t.totalSec = nextTotal;
     saveTimers();
+    syncChronoServeur(btn.dataset.conf, t);
     await renderApp(); return;
   }
   if (a === "point") {

@@ -36,6 +36,22 @@ public class CombatsController(FkcScoringContext db, AuditService audit) : Contr
         return combat == null ? NotFound() : combat.ToDto();
     }
 
+    /// <summary>
+    /// Miroir pur d'affichage : reçoit l'état du chronomètre client (démarré/en pause, temps restant)
+    /// pour qu'un écran public séparé puisse le reconstruire par polling. N'affecte ni le statut du
+    /// combat ni le score — ne déclenche donc pas d'audit, contrairement aux vraies actions d'arbitrage.
+    /// </summary>
+    [HttpPost("{id}/chrono-sync")]
+    public async Task<IActionResult> ChronoSync(int id, ChronoSyncRequest req)
+    {
+        var combat = await db.Combats.FindAsync(id);
+        if (combat == null) return NotFound();
+        combat.ChronoDemarreLeUtc = req.Running ? DateTime.UtcNow : null;
+        combat.ChronoRestantMs = req.RemainingMs;
+        await db.SaveChangesAsync();
+        return NoContent();
+    }
+
     [HttpPost("{id}/demarrer")]
     public async Task<ActionResult<ConfrontationDto>> Demarrer(int id)
     {

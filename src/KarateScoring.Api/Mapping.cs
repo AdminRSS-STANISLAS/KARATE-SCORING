@@ -34,7 +34,8 @@ public static class Mapping
             e.Type == TypeEvenement.Point ? PointLabel(e.Points) : e.Penalite.ToString() ?? "",
             e.Points)).ToList(),
         null, null, null, null,
-        c.ProchainCombatId, c.ProchainCombatCouleur?.ToString());
+        c.ProchainCombatId, c.ProchainCombatCouleur?.ToString(),
+        c.ChronoDemarreLeUtc, c.ChronoRestantMs);
 
     private static string PointLabel(int? points) => points switch { 3 => "Ippon", 2 => "Waza-ari", 1 => "Yuko", _ => "Point" };
 
@@ -55,7 +56,8 @@ public static class Mapping
             null,
             c.Kata1?.Nom, c.Kata2?.Nom, c.NbJuges,
             c.Votes.Select(v => new VoteDto(v.JugeNumero, v.VoteCouleur.ToString())).ToList(),
-            c.ProchainConfrontationId, c.ProchainConfrontationCouleur?.ToString());
+            c.ProchainConfrontationId, c.ProchainConfrontationCouleur?.ToString(),
+            null, null);
     }
 
     public static AireDto ToDto(this Aire a) => new(a.Id, a.Nom, a.Ordre);

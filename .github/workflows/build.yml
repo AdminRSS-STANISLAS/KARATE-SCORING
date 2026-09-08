@@ -1,0 +1,27 @@
+name: Build & Test
+
+on:
+  push:
+    branches: [main, "feature/**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "9.0.x"
+
+      - name: Restore
+        run: dotnet restore FkcScoring.sln
+
+      - name: Build
+        run: dotnet build FkcScoring.sln --no-restore --configuration Release
+
+      - name: Test
+        run: dotnet test tests/FkcScoring.Core.Tests/FkcScoring.Core.Tests.csproj --no-build --configuration Release

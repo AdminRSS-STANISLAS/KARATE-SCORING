@@ -37,6 +37,18 @@ Puis ouvrir `http://localhost:5090` dans un navigateur. Voir [INSTALLATION.md](I
 dotnet test
 ```
 
+## Publication d'une version distribuable
+
+```powershell
+./scripts/publish.ps1
+```
+
+Produit un exécutable autonome dans `publish/win-x64/` — voir [DEPLOYMENT.md](DEPLOYMENT.md#6-publier-une-version-optimisée-optionnel-recommandé-pour-un-vrai-tournoi).
+
+## Licence
+
+Logiciel propriétaire — voir [LICENSE](LICENSE).
+
 ## État du projet
 
-Développé par phases (voir le prompt maître interne) : audit, architecture, scoring, tournois, multi-tatamis/réseau, UI/UX, sécurité, tests, sauvegarde — toutes terminées. Phase en cours : préparation commerciale (documentation, finitions).
+Développé par phases (voir le prompt maître interne) : audit, architecture, scoring, tournois, multi-tatamis/réseau, UI/UX, sécurité, tests, sauvegarde, préparation commerciale (documentation, licence, publication, CI) — toutes terminées.

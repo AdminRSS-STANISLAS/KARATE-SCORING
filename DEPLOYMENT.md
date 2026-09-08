@@ -32,13 +32,18 @@ Sur l'écran **Tatamis**, créer une **Aire** par tapis de compétition, puis l'
 
 ## 6. Publier une version optimisée (optionnel, recommandé pour un vrai tournoi)
 
-```bash
-dotnet publish src/KarateScoring.Api -c Release -o publish
+Sous Windows, le script fourni produit un exécutable autonome (aucun .NET SDK requis sur le poste organisateur) :
+
+```powershell
+./scripts/publish.ps1
 ```
 
-Puis lancer depuis le dossier `publish/` :
+Résultat dans `publish/win-x64/KarateScoring.Api.exe` (et une archive `publish/karate-scoring_win-x64.zip` prête à copier sur le poste organisateur). Pour une autre plateforme : `./scripts/publish.ps1 -Runtime linux-x64` ou `-Runtime osx-x64`.
+
+Alternative manuelle (nécessite le .NET SDK sur le poste cible) :
 
 ```bash
+dotnet publish src/KarateScoring.Api -c Release -o publish
 cd publish
 ./KarateScoring.Api        # Linux/macOS
 KarateScoring.Api.exe      # Windows

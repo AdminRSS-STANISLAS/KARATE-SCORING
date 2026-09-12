@@ -56,3 +56,7 @@ app.MapControllers();
 app.MapFallbackToFile("index.html");
 
 app.Run();
+
+/// <summary>Rend la classe générée par les "top-level statements" (normalement <c>internal</c>) publique,
+/// pour que <c>WebApplicationFactory&lt;Program&gt;</c> (tests d'intégration HTTP) puisse en hériter.</summary>
+public partial class Program;

@@ -161,8 +161,12 @@ function field(label, name, type, placeholder, required, style) {
 function numField(label, name, val) {
   return `<div class="field"><label>${esc(label)}</label><input type="number" name="${name}" value="${val === undefined || val === "" || val === null ? "" : val}"></div>`;
 }
-function selectField(label, name, options, def, labelFn) {
-  const opts = options.map((o) => `<option value="${esc(o)}" ${o === def ? "selected" : ""}>${esc(labelFn ? labelFn(o) : (o || "—"))}</option>`).join("");
+function selectField(label, name, options, def, labelFn, optionsVerrouillees) {
+  const verrouillees = new Set(optionsVerrouillees || []);
+  const opts = options.map((o) => {
+    const locked = verrouillees.has(o);
+    return `<option value="${esc(o)}" ${o === def ? "selected" : ""} ${locked ? "disabled" : ""}>${esc(labelFn ? labelFn(o) : (o || "—"))}${locked ? " 🔒 (édition supérieure)" : ""}</option>`;
+  }).join("");
   return `<div class="field"><label>${esc(label)}</label><select name="${name}">${opts}</select></div>`;
 }
 function medalCard(cls, label, nom) {
@@ -213,7 +217,7 @@ const NAV = [
   { id: "competitions", label: "Compétitions", ico: "◆", kanji: "大会" },
   { id: "categories", label: "Catégories", ico: "▤", kanji: "級" },
   { id: "participants", label: "Participants", ico: "◉", kanji: "選手" },
-  { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組" },
+  { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組", locked: true },
   { sec: "Compétition" },
   { id: "tableaux", label: "Tableaux", ico: "⑂", kanji: "表" },
   { id: "tatamis", label: "Tatamis", ico: "▣", kanji: "畳" },
@@ -225,8 +229,11 @@ const NAV = [
   { id: "securite", label: "Sécurité", ico: "⛨", kanji: "安全" },
 ];
 
+let lastRenderedRoute = null;
 async function renderApp() {
   if (currentRoute === "public") { await renderPublicScreen(); return; }
+  const estNouvelEcran = currentRoute !== lastRenderedRoute; // rejoue la transition seulement au changement de route, pas à chaque interaction (score, formulaire...)
+  lastRenderedRoute = currentRoute;
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
@@ -244,14 +251,18 @@ async function renderApp() {
   let html;
   try { html = await renderScreen(); }
   catch (e) { html = `<div class="card"><p class="error">${esc(e.message || String(e))}</p></div>`; }
-  document.getElementById("screenRoot").innerHTML = html;
+  const root = document.getElementById("screenRoot");
+  root.innerHTML = html;
+  if (estNouvelEcran) root.classList.add("screen-enter");
 }
 
 function renderSidebar() {
   const comp = activeComp();
   const navHtml = NAV.map((item) => item.sec
     ? `<li class="section-label">${esc(item.sec)}</li>`
-    : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
+    : item.locked
+      ? `<li><a href="#" data-locked-nav="${item.id}" class="nav-locked" title="Fonctionnalité réservée à l'édition supérieure"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">🔒</span></a></li>`
+      : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
   ).join("");
   return `
   <nav class="sidebar${sidebarOpen ? " open" : ""}">
@@ -305,9 +316,18 @@ async function screenAccueil() {
     </div>`;
   }
 
-  const cats = await api.get(`/competitions/${comp.id}/categories`);
+  const [cats, participants, aires] = await Promise.all([
+    api.get(`/competitions/${comp.id}/categories`), api.get("/participants"), api.get(`/competitions/${comp.id}/aires`),
+  ]);
   const avecTableau = cats.filter((c) => c.hasTableau);
   const tableaux = await Promise.all(avecTableau.map(async (c) => ({ cat: c, tableau: await api.get(`/categories/${c.id}/tableau`) })));
+
+  const statsHtml = `<div class="stats-row">
+    ${statCard("◆", competitionsCache.length, "Compétitions")}
+    ${statCard("◉", participants.length, "Participants")}
+    ${statCard("▤", cats.length, "Catégories")}
+    ${statCard("▣", aires.length, "Tatamis actifs")}
+  </div>`;
 
   const brackets = tableaux.map(({ cat, tableau }) => {
     let html;
@@ -335,8 +355,12 @@ async function screenAccueil() {
     </div>` : "";
 
   return `<div class="topbar"><div><div class="crumb">Karate Scoring</div><h1>Bienvenue à ${esc(comp.nom)}${comp.lieu ? " — " + esc(comp.lieu) : ""}</h1></div></div>
+  ${statsHtml}
   ${brackets || '<p class="empty">Aucun tableau généré pour l\'instant — rendez-vous dans l\'écran Tableaux.</p>'}
   ${suivantHtml}`;
+}
+function statCard(icon, valeur, label) {
+  return `<div class="stat-card"><div class="stat-ico">${icon}</div><div class="stat-body"><div class="stat-val">${valeur}</div><div class="stat-label">${esc(label)}</div></div></div>`;
 }
 
 /* ---- Compétitions ---- */
@@ -361,7 +385,7 @@ async function screenCompetitions() {
       ${field("Nom", "nom", "text", "Ex. Coupe FKC 2026", true)}
       ${field("Date", "date", "date", "", true)}
       ${field("Lieu", "lieu", "text", "Ex. Gymnase Fouda", true)}
-      ${selectField("Niveau", "niveau", NIVEAUX, "Club")}
+      ${selectField("Niveau", "niveau", NIVEAUX, "Club", null, ["National"])}
       <div></div><div></div>
       <div style="grid-column:1/-1"><button class="btn btn-primary" type="submit">Créer la compétition</button></div>
     </form>
@@ -406,7 +430,7 @@ async function screenCategories() {
   <div class="card"><h3>Nouvelle catégorie</h3>
     <form id="form-categorie" data-comp="${comp.id}" class="grid grid-4">
       ${field("Nom", "nom", "text", "Ex. Kumite Seniors -75kg", true, "grid-column:1/3")}
-      ${selectField("Discipline", "discipline", ["KumiteIndividuel", "KataIndividuel", "KataEquipe"], "KumiteIndividuel", disciplineLabel)}
+      ${selectField("Discipline", "discipline", ["KumiteIndividuel", "KataIndividuel", "KataEquipe"], "KumiteIndividuel", disciplineLabel, ["KataEquipe"])}
       ${selectField("Sexe", "sexe", ["Mixte", "Messieurs", "Dames"], "Mixte")}
       ${numField("Âge min", "ageMin", 14)}
       ${numField("Âge max", "ageMax", 99)}
@@ -749,12 +773,19 @@ function publicChronoTxt(c) {
   return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 }
 
+// L'écran public se rafraîchit en boucle (toutes les secondes) et ConfrontationDto ne porte pas de
+// drapeau "a une photo" (contrairement à ParticipantDto.aPhoto, utilisé ailleurs) — sans ce cache,
+// chaque tick relancerait une requête vouée à échouer en 404 pour un participant sans photo.
+const photosConnuesAbsentes = new Set();
+function publicPhotoManquante(id) { photosConnuesAbsentes.add(id); const el = document.getElementById(`public-photo-${id}`); if (el) { el.style.display = "none"; el.nextElementSibling.style.display = "flex"; } }
+window.publicPhotoManquante = publicPhotoManquante; // appelé depuis l'attribut inline onerror de l'<img> ci-dessous, donc doit être global (le reste du fichier est dans une IIFE)
 function publicPhotoFrame(participantId, couleur, sizePx) {
-  const img = participantId != null
-    ? `<img src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+  const aPhotoConnue = participantId != null && !photosConnuesAbsentes.has(participantId);
+  const img = aPhotoConnue
+    ? `<img id="public-photo-${participantId}" src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="publicPhotoManquante(${participantId})">`
     : "";
   const sizeStyle = sizePx ? `style="width:${sizePx}px;height:${sizePx}px;"` : "";
-  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
+  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${aPhotoConnue ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
 }
 function publicEvenements(evenements, couleur) {
   const filtres = (evenements || []).filter((e) => e.couleur === (couleur === "aka" ? "Aka" : "Ao"));
@@ -1064,14 +1095,14 @@ async function renderSauvegardes() {
     <td><button class="btn btn-sm btn-danger" data-action="restaurer-sauvegarde" data-nom="${esc(s.nom)}">Restaurer</button></td></tr>`).join("");
 
   return `<div class="card"><h3>Sauvegardes</h3>
-    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste.</p>
+    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste, ou pour la transférer vers un autre poste Karate Scoring — l'archive contient la base ET les photos/logos importés.</p>
     <a class="btn btn-primary btn-sm" href="/api/sauvegardes/telecharger" download>Télécharger une sauvegarde maintenant</a>
     ${rows ? `<div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Fichier</th><th>Créée le</th><th>Taille</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucune sauvegarde pour l\'instant.</p>'}
     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;">
       <h4 style="font-size:13px;margin-bottom:8px;">Importer une sauvegarde externe</h4>
       <p class="error" style="margin-bottom:10px;">Remplace immédiatement toutes les données actuelles (une sauvegarde de l'état présent est prise automatiquement avant).</p>
       <form id="form-importer-sauvegarde" class="row-inline">
-        <input type="file" name="fichier" accept=".db" required>
+        <input type="file" name="fichier" accept=".zip,.db" required>
         <button class="btn btn-sm btn-danger" type="submit">Importer et restaurer</button>
       </form>
     </div>
@@ -1114,12 +1145,7 @@ async function seedDemo() {
   await makeCat("Kata Individuel Seniors", "KataIndividuel", 4);
   await makeCat("Kata Individuel Juniors", "KataIndividuel", 9);
 
-  const eqCat = await api.post(`/competitions/${comp.id}/categories`, { nom: "Kata Équipes Seniors", discipline: "KataEquipe", sexe: "Mixte", ageMin: 16, ageMax: 99, gradeMin: null });
-  const eqPool = participants.slice(18, 27);
-  for (let e = 0; e < 3; e++) {
-    const membreIds = eqPool.slice(e * 3, e * 3 + 3).map((p) => p.id);
-    await api.post(`/competitions/${comp.id}/equipes`, { nom: `Équipe ${rand(clubs)} ${e + 1}`, club: rand(clubs), membreIds, categorieId: eqCat.id });
-  }
+  // Kata Équipe est verrouillé dans cette édition (voir EditionLimits côté serveur) — pas de démo pour cette discipline.
 
   toast("Données de démonstration chargées.");
   currentRoute = "competitions";
@@ -1132,6 +1158,9 @@ const appEl = document.getElementById("app");
 appEl.addEventListener("click", async (e) => {
   const navEl = e.target.closest("[data-nav]");
   if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; sidebarOpen = false; await renderApp(); return; }
+
+  const lockedNavEl = e.target.closest("[data-locked-nav]");
+  if (lockedNavEl) { e.preventDefault(); toast("Fonctionnalité réservée à l'édition supérieure — contactez-nous pour la débloquer.", true); return; }
 
   const btn = e.target.closest("[data-action]");
   if (!btn) return;
@@ -1283,6 +1312,8 @@ appEl.addEventListener("submit", async (e) => {
   const form = e.target;
   if (!form.id) return;
   e.preventDefault();
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.classList.add("btn-loading");
   const f = new FormData(form);
 
   if (form.id === "form-competition") {

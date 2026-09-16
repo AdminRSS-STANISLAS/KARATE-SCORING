@@ -50,7 +50,9 @@ public class ResultatsController(FkcScoringContext db) : ControllerBase
         var categories = await db.Categories.Where(c => c.CompetitionId == competitionId && c.Discipline != Discipline.KumiteIndividuel)
             .Where(c => categorie == null || c.Nom == categorie).ToListAsync();
         var categorieIds = categories.Select(c => c.Id).ToList();
-        var tableauIds = await db.Tableaux.Where(t => categorieIds.Contains(t.CategorieId)).Select(t => t.Id).ToListAsync();
+        var tableauCategorieIds = await db.Tableaux.Where(t => categorieIds.Contains(t.CategorieId))
+            .Select(t => new { t.Id, t.CategorieId }).ToListAsync();
+        var tableauIds = tableauCategorieIds.Select(t => t.Id).ToList();
         var confrontations = await db.KataConfrontations
             .Include(c => c.Participant1).ThenInclude(p => p!.Club)
             .Include(c => c.Participant2).ThenInclude(p => p!.Club)
@@ -61,9 +63,11 @@ public class ResultatsController(FkcScoringContext db) : ControllerBase
             .Include(c => c.Votes)
             .Where(c => tableauIds.Contains(c.TableauId) && c.Statut == StatutCombat.Termine && !c.EstBye)
             .ToListAsync();
-        var disciplineParTableau = await db.Tableaux.Where(t => tableauIds.Contains(t.Id))
-            .Join(categories, t => t.CategorieId, c => c.Id, (t, c) => new { t.Id, c.Discipline })
-            .ToDictionaryAsync(x => x.Id, x => x.Discipline);
+        // Jointure faite côté .NET plutôt que via EF Core : `categories` est déjà une liste en mémoire
+        // (matérialisée ci-dessus), et EF ne sait pas traduire un .Join() contre une List<T> suivi d'un
+        // .ToDictionaryAsync() ici (l'exception "could not be translated" est reproductible).
+        var disciplineParCategorie = categories.ToDictionary(c => c.Id, c => c.Discipline);
+        var disciplineParTableau = tableauCategorieIds.ToDictionary(t => t.Id, t => disciplineParCategorie[t.CategorieId]);
 
         var pdf = new KataReportBuilder().Generer(competition, confrontations, disciplineParTableau, categorie);
         return File(pdf, "application/pdf", $"rapport-kata-{competition.Nom}.pdf");

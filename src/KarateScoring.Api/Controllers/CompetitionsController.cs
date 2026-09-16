@@ -1,5 +1,6 @@
 using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using FkcScoring.Core.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -25,6 +26,8 @@ public class CompetitionsController(FkcScoringContext db) : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.Nom)) return BadRequest("Le nom est requis.");
         if (!Enum.TryParse<NiveauCompetition>(req.Niveau, out var niveau)) return BadRequest("Niveau invalide.");
+        if (niveau == NiveauCompetition.National && !EditionLimits.NiveauNationalAutorise)
+            return StatusCode(StatusCodes.Status403Forbidden, new { detail = "Le niveau National est réservé à l'édition supérieure." });
 
         var competition = new Competition { Nom = req.Nom.Trim(), Date = req.Date, Lieu = req.Lieu, Niveau = niveau };
         db.Competitions.Add(competition);

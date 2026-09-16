@@ -1,3 +1,4 @@
+using System.IO.Compression;
 using FkcScoring.Core.Data;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -80,6 +81,77 @@ public static class SauvegardeService
         catch (SqliteException)
         {
             return false;
+        }
+    }
+
+    /// <summary>
+    /// Package la base + les photos/logos importés (uploads/) dans une archive unique, transférable telle
+    /// quelle vers un autre poste Karate Scoring (clé USB, partage réseau) — un export "juste la base" (le
+    /// seul format avant cette fonctionnalité) perdait silencieusement toutes les photos, puisqu'elles
+    /// vivent en fichiers séparés sur disque, pas dans le contenu de la base SQLite elle-même.
+    /// </summary>
+    public static byte[] CreerArchiveTransfert(FkcScoringContext db, string uploadsDir, string tempDir)
+    {
+        Directory.CreateDirectory(tempDir);
+        var dbTemp = SauvegarderVersFichier(db, tempDir, "export");
+        var zipTemp = Path.Combine(tempDir, $"export_{Guid.NewGuid():N}.zip");
+        try
+        {
+            using (var zip = ZipFile.Open(zipTemp, ZipArchiveMode.Create))
+            {
+                zip.CreateEntryFromFile(dbTemp, "karate-scoring.db");
+                if (Directory.Exists(uploadsDir))
+                    foreach (var fichier in Directory.GetFiles(uploadsDir))
+                        zip.CreateEntryFromFile(fichier, Path.Combine("uploads", Path.GetFileName(fichier)));
+            }
+            return File.ReadAllBytes(zipTemp);
+        }
+        finally
+        {
+            if (File.Exists(dbTemp)) File.Delete(dbTemp);
+            if (File.Exists(zipTemp)) File.Delete(zipTemp);
+        }
+    }
+
+    /// <summary>
+    /// Restaure depuis une archive de transfert (base + photos/logos) produite par <see cref="CreerArchiveTransfert"/>.
+    /// Accepte aussi un simple fichier .db (anciens exports, ou sauvegarde automatique) : dans ce cas les
+    /// photos ne sont pas touchées — c'est déjà le comportement historique de <see cref="Restaurer"/>.
+    /// </summary>
+    public static void RestaurerArchiveTransfert(string dbPath, string uploadsDir, byte[] zipOuDb, string tempDir)
+    {
+        Directory.CreateDirectory(tempDir);
+        var estZip = zipOuDb.Length >= 2 && zipOuDb[0] == 'P' && zipOuDb[1] == 'K';
+        if (!estZip)
+        {
+            var tempDb = Path.Combine(tempDir, $"import_{Guid.NewGuid():N}.db");
+            File.WriteAllBytes(tempDb, zipOuDb);
+            try { Restaurer(dbPath, tempDb); } finally { if (File.Exists(tempDb)) File.Delete(tempDb); }
+            return;
+        }
+
+        var zipTemp = Path.Combine(tempDir, $"import_{Guid.NewGuid():N}.zip");
+        var extractDir = Path.Combine(tempDir, $"import_{Guid.NewGuid():N}");
+        try
+        {
+            File.WriteAllBytes(zipTemp, zipOuDb);
+            ZipFile.ExtractToDirectory(zipTemp, extractDir);
+            var dbExtrait = Path.Combine(extractDir, "karate-scoring.db");
+            if (!File.Exists(dbExtrait)) throw new InvalidOperationException("Archive invalide : base de données introuvable.");
+            Restaurer(dbPath, dbExtrait);
+
+            var uploadsExtrait = Path.Combine(extractDir, "uploads");
+            if (Directory.Exists(uploadsExtrait))
+            {
+                Directory.CreateDirectory(uploadsDir);
+                foreach (var fichier in Directory.GetFiles(uploadsExtrait))
+                    File.Copy(fichier, Path.Combine(uploadsDir, Path.GetFileName(fichier)), overwrite: true);
+            }
+        }
+        finally
+        {
+            if (File.Exists(zipTemp)) File.Delete(zipTemp);
+            if (Directory.Exists(extractDir)) Directory.Delete(extractDir, recursive: true);
         }
     }
 }

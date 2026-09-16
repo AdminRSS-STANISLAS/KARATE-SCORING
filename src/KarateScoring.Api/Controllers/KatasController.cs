@@ -17,7 +17,20 @@ public class KatasController(FkcScoringContext db) : ControllerBase
     public async Task<ActionResult<KataDto>> Create(CreateKataRequest req)
     {
         if (string.IsNullOrWhiteSpace(req.Nom)) return BadRequest("Le nom du kata est requis.");
-        var kata = new Kata { Nom = req.Nom.Trim(), Actif = true };
+        var nom = req.Nom.Trim();
+
+        // Comparaison faite côté .NET (pas traduite en SQL), même raison que ClubsController.Resolve :
+        // ToLower() d'EF Core sur SQLite ne gère correctement que l'ASCII. Réutilise un kata existant
+        // (même désactivé) plutôt que d'en créer un doublon indiscernable dans la liste déroulante.
+        var existant = (await db.Katas.ToListAsync()).FirstOrDefault(k => string.Equals(k.Nom, nom, StringComparison.OrdinalIgnoreCase));
+        if (existant != null)
+        {
+            if (!existant.Actif) existant.Actif = true;
+            await db.SaveChangesAsync();
+            return existant.ToDto();
+        }
+
+        var kata = new Kata { Nom = nom, Actif = true };
         db.Katas.Add(kata);
         await db.SaveChangesAsync();
         return kata.ToDto();

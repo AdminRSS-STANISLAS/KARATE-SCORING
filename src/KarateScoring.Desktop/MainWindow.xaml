@@ -1,0 +1,8 @@
+<Window x:Class="KarateScoring.Desktop.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf"
+        Title="Karate Scoring" Width="1360" Height="860" WindowStartupLocation="CenterScreen"
+        Background="#12141A">
+    <wv2:WebView2 x:Name="Browser"/>
+</Window>

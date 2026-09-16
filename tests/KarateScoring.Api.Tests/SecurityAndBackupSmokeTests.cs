@@ -37,11 +37,13 @@ public class SecurityAndBackupSmokeTests : IDisposable
     }
 
     [Fact]
-    public async Task TelechargerSauvegarde_RenvoieUnFichierSqlite()
+    public async Task TelechargerSauvegarde_RenvoieUneArchiveZip()
     {
+        // Zip (base + photos/logos), pas un .db brut — voir SauvegardeServiceTests.ArchiveTransfert_RoundTrip
+        // pour le pourquoi : un export "juste la base" perdait silencieusement les photos importées.
         var res = await _client.GetAsync("/api/sauvegardes/telecharger");
         res.EnsureSuccessStatusCode();
-        Assert.Equal("application/octet-stream", res.Content.Headers.ContentType!.MediaType);
+        Assert.Equal("application/zip", res.Content.Headers.ContentType!.MediaType);
         var octets = await res.Content.ReadAsByteArrayAsync();
         Assert.True(octets.Length > 0);
     }

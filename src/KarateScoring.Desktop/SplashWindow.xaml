@@ -1,0 +1,52 @@
+<Window x:Class="KarateScoring.Desktop.SplashWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Karate Scoring"
+        WindowStyle="None" ResizeMode="NoResize" WindowStartupLocation="CenterScreen"
+        AllowsTransparency="True" Background="Transparent"
+        Width="520" Height="400" Topmost="True">
+    <Border Background="#12141A" CornerRadius="14" BorderBrush="#2A2E38" BorderThickness="1">
+        <Border.Effect>
+            <DropShadowEffect Color="Black" BlurRadius="30" ShadowDepth="0" Opacity="0.5"/>
+        </Border.Effect>
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="40"/>
+            </Grid.RowDefinitions>
+
+            <Image x:Name="Logo" Grid.Row="0" Source="Assets/splash-logo.jpg" Stretch="Uniform"
+                   Margin="48,40,48,10" RenderTransformOrigin="0.5,0.5" Opacity="0">
+                <Image.RenderTransform>
+                    <ScaleTransform x:Name="LogoScale" ScaleX="0.92" ScaleY="0.92"/>
+                </Image.RenderTransform>
+                <Image.Clip>
+                    <RectangleGeometry Rect="0,0,424,283" RadiusX="12" RadiusY="12"/>
+                </Image.Clip>
+            </Image>
+
+            <TextBlock Grid.Row="1" Text="PLATEFORME LOCALE DE GESTION DE COMPÉTITIONS"
+                       Foreground="#8B93A3" FontFamily="Segoe UI" FontSize="11" FontWeight="SemiBold"
+                       HorizontalAlignment="Center" Margin="0,0,0,18" Opacity="0" x:Name="Subtitle">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="SubtitleShift" Y="8"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+
+            <TextBlock Grid.Row="2" Text="DEVELOP BY MANI ONANA STANISLAS LOIC"
+                       Foreground="#E0123A" FontFamily="Segoe UI" FontSize="17" FontWeight="Bold"
+                       HorizontalAlignment="Center" TextAlignment="Center" TextWrapping="Wrap"
+                       Margin="24,0,24,16" Opacity="0" x:Name="Credit">
+                <TextBlock.RenderTransform>
+                    <TranslateTransform x:Name="CreditShift" Y="8"/>
+                </TextBlock.RenderTransform>
+            </TextBlock>
+
+            <StackPanel Grid.Row="3" Orientation="Horizontal" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <TextBlock x:Name="StatusText" Text="Démarrage…" Foreground="#616B7A" FontFamily="Segoe UI" FontSize="11"/>
+            </StackPanel>
+        </Grid>
+    </Border>
+</Window>

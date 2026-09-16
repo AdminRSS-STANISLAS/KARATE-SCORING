@@ -2,6 +2,12 @@ using FkcScoring.Core.Data;
 using FkcScoring.Core.Domain;
 using Microsoft.EntityFrameworkCore;
 
+// QuestPDF (exports PDF résultats Kumite/Kata) exige une auto-déclaration de licence au démarrage
+// depuis ses versions récentes, sans quoi toute génération de PDF échoue avec une 500 — jamais
+// configuré jusqu'ici, donc les exports PDF étaient cassés en silence. Community : gratuit pour les
+// particuliers/associations/organisations sous 1M$ de chiffre d'affaires annuel, le cas de ce projet.
+QuestPDF.Settings.License = QuestPDF.Infrastructure.LicenseType.Community;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Écoute sur toutes les interfaces (pas juste localhost) pour que les postes de scoring des autres

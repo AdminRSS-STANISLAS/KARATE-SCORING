@@ -11,20 +11,24 @@ public class SauvegardesController(FkcScoringContext db, AuditService audit) : C
 {
     private static string DbPath => FkcScoringPaths.ResolveDbPath();
     private static string BackupDir => FkcScoringPaths.ResolveBackupDir(DbPath);
+    private static string UploadsDir => FkcScoringPaths.ResolveUploadsDir(DbPath);
+    private static string TempDir => Path.Combine(Path.GetTempPath(), "karate-scoring-export");
 
     [HttpGet]
     public ActionResult<List<SauvegardeInfo>> Lister() => SauvegardeService.ListerSauvegardes(BackupDir);
 
-    /// <summary>Sauvegarde téléchargeable à la demande (pour clé USB/disque externe, cahier §25) — cohérente même pendant un usage actif (VACUUM INTO).</summary>
+    /// <summary>
+    /// Sauvegarde téléchargeable à la demande (pour clé USB/disque externe, transfert vers un autre poste
+    /// Karate Scoring — cahier §25) — base + photos/logos importés dans une seule archive, cohérente même
+    /// pendant un usage actif (VACUUM INTO). Une archive complète, pas juste la base : les photos vivent en
+    /// fichiers séparés sur disque, un export "base seule" les perdrait silencieusement.
+    /// </summary>
     [HttpGet("telecharger")]
     public IActionResult Telecharger()
     {
-        var tempDir = Path.Combine(Path.GetTempPath(), "karate-scoring-export");
-        var chemin = SauvegardeService.SauvegarderVersFichier(db, tempDir, "export");
-        var nomTelechargement = $"karate-scoring_{DateTime.Now:yyyyMMdd_HHmmss}.db";
-        var octets = System.IO.File.ReadAllBytes(chemin);
-        System.IO.File.Delete(chemin);
-        return File(octets, "application/octet-stream", nomTelechargement);
+        var octets = SauvegardeService.CreerArchiveTransfert(db, UploadsDir, TempDir);
+        var nomTelechargement = $"karate-scoring_{DateTime.Now:yyyyMMdd_HHmmss}.zip";
+        return File(octets, "application/zip", nomTelechargement);
     }
 
     [HttpPost("{nom}/restaurer")]
@@ -42,6 +46,9 @@ public class SauvegardesController(FkcScoringContext db, AuditService audit) : C
         return NoContent();
     }
 
+    /// <summary>Accepte une archive .zip produite par <c>/telecharger</c> (base + photos/logos) ou, pour
+    /// compatibilité, un simple fichier .db issu d'un export précédent (dans ce cas les photos ne sont pas
+    /// touchées).</summary>
     [HttpPost("importer")]
     [RequestSizeLimit(500_000_000)]
     public async Task<IActionResult> Importer(IFormFile fichier, [FromForm] string? code)
@@ -50,23 +57,40 @@ public class SauvegardesController(FkcScoringContext db, AuditService audit) : C
             return StatusCode(StatusCodes.Status403Forbidden, new { detail = "Code administrateur incorrect." });
         if (fichier.Length == 0) return BadRequest("Fichier vide.");
 
-        var cheminTemp = Path.Combine(Path.GetTempPath(), $"karate-scoring-import-{Guid.NewGuid()}.db");
+        byte[] octets;
+        using (var ms = new MemoryStream())
+        {
+            await fichier.CopyToAsync(ms);
+            octets = ms.ToArray();
+        }
+
+        var estZip = octets.Length >= 2 && octets[0] == 'P' && octets[1] == 'K';
+        if (!estZip)
+        {
+            Directory.CreateDirectory(TempDir);
+            var cheminValidation = Path.Combine(TempDir, $"validation_{Guid.NewGuid():N}.db");
+            try
+            {
+                await System.IO.File.WriteAllBytesAsync(cheminValidation, octets);
+                if (!SauvegardeService.EstFichierSqliteValide(cheminValidation))
+                    return BadRequest("Ce fichier ne semble pas être une sauvegarde Karate Scoring valide.");
+            }
+            finally
+            {
+                if (System.IO.File.Exists(cheminValidation)) System.IO.File.Delete(cheminValidation);
+            }
+        }
+
         try
         {
-            await using (var stream = System.IO.File.Create(cheminTemp))
-                await fichier.CopyToAsync(stream);
-
-            if (!SauvegardeService.EstFichierSqliteValide(cheminTemp))
-                return BadRequest("Ce fichier ne semble pas être une sauvegarde Karate Scoring valide.");
-
             SauvegardeService.SauvegarderVersFichier(db, BackupDir, "avant_restauration");
-            SauvegardeService.Restaurer(DbPath, cheminTemp);
+            SauvegardeService.RestaurerArchiveTransfert(DbPath, UploadsDir, octets, TempDir);
             audit.Consigner("Sauvegarde", 0, "Import", null, fichier.FileName);
             return NoContent();
         }
-        finally
+        catch (Exception ex) when (ex is InvalidOperationException or System.IO.InvalidDataException)
         {
-            if (System.IO.File.Exists(cheminTemp)) System.IO.File.Delete(cheminTemp);
+            return BadRequest("Ce fichier ne semble pas être une sauvegarde Karate Scoring valide : " + ex.Message);
         }
     }
 }

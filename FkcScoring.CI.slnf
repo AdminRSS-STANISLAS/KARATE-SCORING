@@ -1,0 +1,11 @@
+{
+  "solution": {
+    "path": "FkcScoring.sln",
+    "projects": [
+      "src\\FkcScoring.Core\\FkcScoring.Core.csproj",
+      "src\\KarateScoring.Api\\KarateScoring.Api.csproj",
+      "tests\\FkcScoring.Core.Tests\\FkcScoring.Core.Tests.csproj",
+      "tests\\KarateScoring.Api.Tests\\KarateScoring.Api.Tests.csproj"
+    ]
+  }
+}

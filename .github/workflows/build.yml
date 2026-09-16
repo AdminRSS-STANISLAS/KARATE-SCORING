@@ -17,11 +17,14 @@ jobs:
         with:
           dotnet-version: "9.0.x"
 
+      # KarateScoring.Desktop (WPF, net9.0-windows) can't build on Linux — this filter is the full
+      # solution minus that project. It still builds on every real Windows machine via
+      # scripts/publish.ps1 / FkcScoring.sln directly; CI only needs the cross-platform pieces.
       - name: Restore
-        run: dotnet restore FkcScoring.sln
+        run: dotnet restore FkcScoring.CI.slnf
 
       - name: Build
-        run: dotnet build FkcScoring.sln --no-restore --configuration Release
+        run: dotnet build FkcScoring.CI.slnf --no-restore --configuration Release
 
       - name: Test
-        run: dotnet test FkcScoring.sln --no-build --configuration Release
+        run: dotnet test FkcScoring.CI.slnf --no-build --configuration Release

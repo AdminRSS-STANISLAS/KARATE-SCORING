@@ -1095,14 +1095,14 @@ async function renderSauvegardes() {
     <td><button class="btn btn-sm btn-danger" data-action="restaurer-sauvegarde" data-nom="${esc(s.nom)}">Restaurer</button></td></tr>`).join("");
 
   return `<div class="card"><h3>Sauvegardes</h3>
-    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste.</p>
+    <p class="hint" style="margin-bottom:10px;">Une sauvegarde automatique est prise régulièrement pendant que l'application tourne. Téléchargez-en une sur une clé USB ou un disque externe pour la conserver hors de ce poste, ou pour la transférer vers un autre poste Karate Scoring — l'archive contient la base ET les photos/logos importés.</p>
     <a class="btn btn-primary btn-sm" href="/api/sauvegardes/telecharger" download>Télécharger une sauvegarde maintenant</a>
     ${rows ? `<div class="table-wrap" style="margin-top:14px;"><table><thead><tr><th>Fichier</th><th>Créée le</th><th>Taille</th><th></th></tr></thead><tbody>${rows}</tbody></table></div>` : '<p class="empty">Aucune sauvegarde pour l\'instant.</p>'}
     <div style="margin-top:16px;border-top:1px solid var(--line);padding-top:14px;">
       <h4 style="font-size:13px;margin-bottom:8px;">Importer une sauvegarde externe</h4>
       <p class="error" style="margin-bottom:10px;">Remplace immédiatement toutes les données actuelles (une sauvegarde de l'état présent est prise automatiquement avant).</p>
       <form id="form-importer-sauvegarde" class="row-inline">
-        <input type="file" name="fichier" accept=".db" required>
+        <input type="file" name="fichier" accept=".zip,.db" required>
         <button class="btn btn-sm btn-danger" type="submit">Importer et restaurer</button>
       </form>
     </div>

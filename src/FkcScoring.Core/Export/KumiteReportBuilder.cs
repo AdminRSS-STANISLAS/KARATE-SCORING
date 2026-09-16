@@ -1,4 +1,6 @@
+using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using FkcScoring.Core.Domain;
 using QuestPDF.Fluent;
 using QuestPDF.Helpers;
 using QuestPDF.Infrastructure;
@@ -59,7 +61,12 @@ public class KumiteReportBuilder
             var aoClub = combat.CompetiteurAo?.Club?.Nom ?? "-";
 
             col.Item().Text($"Combat #{combat.Id} — Tour {combat.Tour}" + (combat.EstBye ? " (exemption)" : "")).Bold();
-            col.Item().Text($"Aka : {akaNom} ({akaClub})   vs   Ao : {aoNom} ({aoClub})");
+            col.Item().Row(row =>
+            {
+                row.RelativeItem().Element(e => ComposeCompetiteur(e, combat.CompetiteurAka, "Aka", akaNom, akaClub));
+                if (!combat.EstBye)
+                    row.RelativeItem().Element(e => ComposeCompetiteur(e, combat.CompetiteurAo, "Ao", aoNom, aoClub));
+            });
 
             if (!combat.EstBye)
             {
@@ -82,6 +89,31 @@ public class KumiteReportBuilder
                 }
             }
         });
+    }
+
+    private static void ComposeCompetiteur(IContainer container, Participant? participant, string couleur, string nom, string club)
+    {
+        container.PaddingTop(4).Row(row =>
+        {
+            row.ConstantItem(30).Height(30).Element(e =>
+            {
+                var photo = ChargerPhoto(participant);
+                if (photo != null) e.Border(1).BorderColor(Colors.Grey.Lighten1).Image(photo).FitArea();
+                else e.Border(1).BorderColor(Colors.Grey.Lighten2).Background(Colors.Grey.Lighten3);
+            });
+            row.RelativeItem().PaddingLeft(6).AlignMiddle().Text($"{couleur} : {nom} ({club})");
+        });
+    }
+
+    /// <summary>Charge la photo importée d'un athlète pour l'incruster dans le PDF — même emplacement de
+    /// stockage que l'API (uploads/, à côté de la base SQLite, jamais dans wwwroot). Absence de photo ou
+    /// fichier introuvable : traité en silence (cadre gris neutre), pas une erreur de génération de rapport.</summary>
+    private static byte[]? ChargerPhoto(Participant? participant)
+    {
+        if (participant?.PhotoExtension == null) return null;
+        var uploadsDir = FkcScoringPaths.ResolveUploadsDir(FkcScoringPaths.ResolveDbPath());
+        var chemin = ImageUploadService.CheminFichier(uploadsDir, "participant", participant.Id, participant.PhotoExtension);
+        return File.Exists(chemin) ? File.ReadAllBytes(chemin) : null;
     }
 
     private static string LibelleDecision(ModeDecision? mode) => mode switch

@@ -14,8 +14,11 @@ public static class DataFolderSettings
     private static readonly string SettingsPath =
         Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "KarateScoring", "shell-settings.json");
 
+    // Documents plutôt que %LOCALAPPDATA% : l'organisateur doit pouvoir retrouver facilement ce dossier
+    // pour le copier à la main (clé USB, partage réseau) vers un autre poste Karate Scoring — %LOCALAPPDATA%
+    // est caché et peu naturel à parcourir pour un usage "copier mes données ailleurs" façon jeu vidéo local.
     private static readonly string DefaultDataFolder =
-        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "KarateScoring");
+        Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments), "KarateScoring");
 
     public static string? LireDossierConfigure()
     {

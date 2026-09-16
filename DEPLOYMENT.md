@@ -64,8 +64,9 @@ Chaque poste devrait aussi renseigner un nom d'opérateur (même écran) pour qu
 ## 8. Sauvegarde pendant et après le tournoi
 
 - Une sauvegarde automatique tourne en tâche de fond toutes les 15 minutes par défaut (`KARATE_SCORING_SAUVEGARDE_INTERVALLE_MIN`), conservant les 20 dernières.
-- À tout moment, télécharger une sauvegarde à jour vers une clé USB depuis l'écran **Sauvegardes** (`GET /api/sauvegardes/telecharger`).
-- En cas de panne du poste central, la base peut être restaurée sur un autre poste : copier le fichier `.db` sauvegardé à l'emplacement attendu (voir [INSTALLATION.md](INSTALLATION.md#emplacement-des-données)) ou l'importer via l'écran Sauvegardes.
+- À tout moment, télécharger une sauvegarde à jour vers une clé USB depuis l'écran **Sauvegardes** (`GET /api/sauvegardes/telecharger`) — une archive `.zip` contenant la base **et** les photos d'athlètes/logos de clubs importés (un export "juste la base" les perdrait, puisqu'ils vivent en fichiers séparés sur disque).
+- **Transférer un tournoi vers un autre poste** : télécharger cette archive sur le poste source, puis l'importer via l'écran Sauvegardes du poste cible (`POST /api/sauvegardes/importer`) — tout est repris, y compris les photos. Un ancien export `.db` seul (avant cette fonctionnalité) reste importable, mais sans les photos.
+- En cas de panne du poste central, la base peut aussi être restaurée en copiant directement le fichier `.db` sauvegardé à l'emplacement attendu (voir [INSTALLATION.md](INSTALLATION.md#emplacement-des-données)) — dans ce cas, copier également le dossier `uploads/` pour conserver les photos.
 
 ## 9. Après le tournoi
 

@@ -161,8 +161,12 @@ function field(label, name, type, placeholder, required, style) {
 function numField(label, name, val) {
   return `<div class="field"><label>${esc(label)}</label><input type="number" name="${name}" value="${val === undefined || val === "" || val === null ? "" : val}"></div>`;
 }
-function selectField(label, name, options, def, labelFn) {
-  const opts = options.map((o) => `<option value="${esc(o)}" ${o === def ? "selected" : ""}>${esc(labelFn ? labelFn(o) : (o || "—"))}</option>`).join("");
+function selectField(label, name, options, def, labelFn, optionsVerrouillees) {
+  const verrouillees = new Set(optionsVerrouillees || []);
+  const opts = options.map((o) => {
+    const locked = verrouillees.has(o);
+    return `<option value="${esc(o)}" ${o === def ? "selected" : ""} ${locked ? "disabled" : ""}>${esc(labelFn ? labelFn(o) : (o || "—"))}${locked ? " 🔒 (édition supérieure)" : ""}</option>`;
+  }).join("");
   return `<div class="field"><label>${esc(label)}</label><select name="${name}">${opts}</select></div>`;
 }
 function medalCard(cls, label, nom) {
@@ -213,7 +217,7 @@ const NAV = [
   { id: "competitions", label: "Compétitions", ico: "◆", kanji: "大会" },
   { id: "categories", label: "Catégories", ico: "▤", kanji: "級" },
   { id: "participants", label: "Participants", ico: "◉", kanji: "選手" },
-  { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組" },
+  { id: "equipes", label: "Équipes Kata", ico: "◈", kanji: "組", locked: true },
   { sec: "Compétition" },
   { id: "tableaux", label: "Tableaux", ico: "⑂", kanji: "表" },
   { id: "tatamis", label: "Tatamis", ico: "▣", kanji: "畳" },
@@ -251,7 +255,9 @@ function renderSidebar() {
   const comp = activeComp();
   const navHtml = NAV.map((item) => item.sec
     ? `<li class="section-label">${esc(item.sec)}</li>`
-    : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
+    : item.locked
+      ? `<li><a href="#" data-locked-nav="${item.id}" class="nav-locked" title="Fonctionnalité réservée à l'édition supérieure"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">🔒</span></a></li>`
+      : `<li><a href="#" data-nav="${item.id}" class="${currentRoute === item.id ? "active" : ""}"><span class="ico">${item.ico}</span>${item.label}<span class="kanji">${item.kanji || ""}</span></a></li>`
   ).join("");
   return `
   <nav class="sidebar${sidebarOpen ? " open" : ""}">
@@ -361,7 +367,7 @@ async function screenCompetitions() {
       ${field("Nom", "nom", "text", "Ex. Coupe FKC 2026", true)}
       ${field("Date", "date", "date", "", true)}
       ${field("Lieu", "lieu", "text", "Ex. Gymnase Fouda", true)}
-      ${selectField("Niveau", "niveau", NIVEAUX, "Club")}
+      ${selectField("Niveau", "niveau", NIVEAUX, "Club", null, ["National"])}
       <div></div><div></div>
       <div style="grid-column:1/-1"><button class="btn btn-primary" type="submit">Créer la compétition</button></div>
     </form>
@@ -406,7 +412,7 @@ async function screenCategories() {
   <div class="card"><h3>Nouvelle catégorie</h3>
     <form id="form-categorie" data-comp="${comp.id}" class="grid grid-4">
       ${field("Nom", "nom", "text", "Ex. Kumite Seniors -75kg", true, "grid-column:1/3")}
-      ${selectField("Discipline", "discipline", ["KumiteIndividuel", "KataIndividuel", "KataEquipe"], "KumiteIndividuel", disciplineLabel)}
+      ${selectField("Discipline", "discipline", ["KumiteIndividuel", "KataIndividuel", "KataEquipe"], "KumiteIndividuel", disciplineLabel, ["KataEquipe"])}
       ${selectField("Sexe", "sexe", ["Mixte", "Messieurs", "Dames"], "Mixte")}
       ${numField("Âge min", "ageMin", 14)}
       ${numField("Âge max", "ageMax", 99)}
@@ -1114,12 +1120,7 @@ async function seedDemo() {
   await makeCat("Kata Individuel Seniors", "KataIndividuel", 4);
   await makeCat("Kata Individuel Juniors", "KataIndividuel", 9);
 
-  const eqCat = await api.post(`/competitions/${comp.id}/categories`, { nom: "Kata Équipes Seniors", discipline: "KataEquipe", sexe: "Mixte", ageMin: 16, ageMax: 99, gradeMin: null });
-  const eqPool = participants.slice(18, 27);
-  for (let e = 0; e < 3; e++) {
-    const membreIds = eqPool.slice(e * 3, e * 3 + 3).map((p) => p.id);
-    await api.post(`/competitions/${comp.id}/equipes`, { nom: `Équipe ${rand(clubs)} ${e + 1}`, club: rand(clubs), membreIds, categorieId: eqCat.id });
-  }
+  // Kata Équipe est verrouillé dans cette édition (voir EditionLimits côté serveur) — pas de démo pour cette discipline.
 
   toast("Données de démonstration chargées.");
   currentRoute = "competitions";
@@ -1132,6 +1133,9 @@ const appEl = document.getElementById("app");
 appEl.addEventListener("click", async (e) => {
   const navEl = e.target.closest("[data-nav]");
   if (navEl) { e.preventDefault(); currentRoute = navEl.dataset.nav; sidebarOpen = false; await renderApp(); return; }
+
+  const lockedNavEl = e.target.closest("[data-locked-nav]");
+  if (lockedNavEl) { e.preventDefault(); toast("Fonctionnalité réservée à l'édition supérieure — contactez-nous pour la débloquer.", true); return; }
 
   const btn = e.target.closest("[data-action]");
   if (!btn) return;

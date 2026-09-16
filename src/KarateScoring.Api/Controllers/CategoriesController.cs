@@ -1,5 +1,6 @@
 using FkcScoring.Core.Data;
 using FkcScoring.Core.Data.Entities;
+using FkcScoring.Core.Domain;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -28,6 +29,8 @@ public class CategoriesController(FkcScoringContext db) : ControllerBase
     {
         if (string.IsNullOrWhiteSpace(req.Nom)) return BadRequest("Le nom est requis.");
         if (!Enum.TryParse<Discipline>(req.Discipline, out var discipline)) return BadRequest("Discipline invalide.");
+        if (discipline == Discipline.KataEquipe && !EditionLimits.KataEquipeAutorise)
+            return StatusCode(StatusCodes.Status403Forbidden, new { detail = "Le Kata Équipe est réservé à l'édition supérieure." });
         if (!await db.Competitions.AnyAsync(c => c.Id == competitionId)) return NotFound("Compétition introuvable.");
 
         var categorie = new Categorie

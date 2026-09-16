@@ -83,6 +83,9 @@ button{cursor:pointer;}
 .nav a.active .ico{color:var(--accent);}
 .nav a.active .kanji{opacity:.65;}
 .nav .section-label{font-size:11px; text-transform:uppercase; letter-spacing:.1em; color:var(--sidebar-ink-dim); padding:16px 14px 7px; font-weight:600;}
+.nav a.nav-locked{opacity:.4; cursor:not-allowed;}
+.nav a.nav-locked:hover{background:none; color:var(--sidebar-ink-dim);}
+.nav a.nav-locked .kanji{font-size:13px; opacity:.7;}
 .sidebar-partner{display:flex; align-items:center; gap:12px; padding:14px 16px; border-top:1px solid var(--sidebar-line);}
 .sidebar-partner img{width:52px; height:52px; border-radius:50%; object-fit:cover; flex:0 0 52px; border:2px solid var(--sidebar-line);}
 .sidebar-partner .ptxt{font-size:11px; color:var(--sidebar-ink-dim); line-height:1.4;}

@@ -773,12 +773,19 @@ function publicChronoTxt(c) {
   return (mm < 10 ? "0" : "") + mm + ":" + (ss < 10 ? "0" : "") + ss;
 }
 
+// L'écran public se rafraîchit en boucle (toutes les secondes) et ConfrontationDto ne porte pas de
+// drapeau "a une photo" (contrairement à ParticipantDto.aPhoto, utilisé ailleurs) — sans ce cache,
+// chaque tick relancerait une requête vouée à échouer en 404 pour un participant sans photo.
+const photosConnuesAbsentes = new Set();
+function publicPhotoManquante(id) { photosConnuesAbsentes.add(id); const el = document.getElementById(`public-photo-${id}`); if (el) { el.style.display = "none"; el.nextElementSibling.style.display = "flex"; } }
+window.publicPhotoManquante = publicPhotoManquante; // appelé depuis l'attribut inline onerror de l'<img> ci-dessous, donc doit être global (le reste du fichier est dans une IIFE)
 function publicPhotoFrame(participantId, couleur, sizePx) {
-  const img = participantId != null
-    ? `<img src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">`
+  const aPhotoConnue = participantId != null && !photosConnuesAbsentes.has(participantId);
+  const img = aPhotoConnue
+    ? `<img id="public-photo-${participantId}" src="/api/participants/${participantId}/photo?t=${Date.now()}" alt="" onerror="publicPhotoManquante(${participantId})">`
     : "";
   const sizeStyle = sizePx ? `style="width:${sizePx}px;height:${sizePx}px;"` : "";
-  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${participantId != null ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
+  return `<div class="public-photo-frame ${couleur}" ${sizeStyle}>${img}<div class="public-photo-fallback" style="${aPhotoConnue ? "display:none;" : "display:flex;"}">${giIcon(couleur, sizePx ? Math.round(sizePx * 0.42) : 100)}</div></div>`;
 }
 function publicEvenements(evenements, couleur) {
   const filtres = (evenements || []).filter((e) => e.couleur === (couleur === "aka" ? "Aka" : "Ao"));

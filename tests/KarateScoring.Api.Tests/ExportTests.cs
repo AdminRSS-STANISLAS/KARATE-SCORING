@@ -10,12 +10,14 @@ namespace KarateScoring.Api.Tests;
 /// les boutons d'export, pas par un test automatisé — d'où ce test, pour que ça ne puisse plus repasser
 /// inaperçu.
 /// </summary>
-public class ExportTests : IDisposable
+public class ExportTests : IDisposable, IAsyncLifetime
 {
     private readonly ApiFactory _factory = new();
     private readonly HttpClient _client;
 
     public ExportTests() => _client = _factory.CreateClient();
+    public Task InitializeAsync() => _factory.ActiverLicenceAsync(_client);
+    public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose() => _factory.Dispose();
 
     [Fact]

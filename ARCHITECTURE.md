@@ -67,6 +67,8 @@ Une **Competition** contient des **Categorie**, des **Club**, des **Participant*
 
 Modèle « protection minimale et pragmatique » (choix produit assumé, pas un système de rôles complet) : un code administrateur (PBKDF2) protège les opérations sensibles (réinitialisation de la base, restauration de sauvegarde) ; chaque poste s'identifie par un nom d'opérateur (en-tête `X-Operateur`) tracé dans le journal d'audit. Pas d'authentification par compte/session — le réseau local du tournoi est considéré comme le périmètre de confiance.
 
+**Activation logicielle** (`LicenceService`, `LicenceController`) : un middleware dans `Program.cs` bloque toute l'API (hors `/api/licence`) tant que le poste n'a pas de clé valide enregistrée. La clé est un HMAC de l'empreinte matérielle du poste (adresse MAC + nom de machine) avec un secret partagé uniquement avec `tools/LicenceKeygen` — un outil console séparé, jamais publié avec l'application, qui génère les clés à partir du code affiché sur l'écran d'activation d'un client. Limite assumée : comme tout schéma offline sans serveur d'activation, un binaire décompilé révèle le secret à un attaquant déterminé — l'objectif est de dissuader la copie/revente casuelle, pas de résister à un reverse engineering poussé (un vrai serveur de licence introduirait une dépendance réseau, contraire à l'exigence offline-first).
+
 ## Voir aussi
 
 - [API.md](API.md) pour la liste complète des routes REST

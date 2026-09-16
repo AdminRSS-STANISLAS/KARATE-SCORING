@@ -7,12 +7,14 @@ namespace KarateScoring.Api.Tests;
 /// téléchargement de sauvegarde (§25) — la logique elle-même est déjà testée unitairement dans
 /// FkcScoring.Core.Tests (SecuriteServiceTests, SauvegardeServiceTests) ; ici on vérifie que les
 /// routes/contrôleurs les exposent correctement.</summary>
-public class SecurityAndBackupSmokeTests : IDisposable
+public class SecurityAndBackupSmokeTests : IDisposable, IAsyncLifetime
 {
     private readonly ApiFactory _factory = new();
     private readonly HttpClient _client;
 
     public SecurityAndBackupSmokeTests() => _client = _factory.CreateClient();
+    public Task InitializeAsync() => _factory.ActiverLicenceAsync(_client);
+    public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose() => _factory.Dispose();
 
     [Fact]

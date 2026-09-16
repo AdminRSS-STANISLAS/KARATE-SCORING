@@ -2,6 +2,20 @@
 
 Ce guide couvre la mise en place réelle : un poste central qui sert plusieurs postes de tatami sur un réseau local, sans Internet.
 
+## 0. Activer le poste
+
+**Chaque poste central doit être activé avant de fonctionner** (cahier §21 — protège contre la copie/revente non autorisée). Sans activation, l'application affiche un écran "Activation requise" et bloque tout le reste.
+
+1. Au premier lancement, l'écran d'activation affiche un **code du poste** (ex. `A2A7-2D61-CEF7`), unique à cette machine.
+2. L'organisateur transmet ce code au vendeur/fournisseur de la licence.
+3. Le fournisseur génère la clé correspondante avec l'outil privé `tools/LicenceKeygen` (jamais distribué avec l'application) :
+   ```bash
+   dotnet run --project tools/LicenceKeygen -- "A2A7-2D61-CEF7"
+   ```
+4. L'organisateur saisit la clé reçue dans l'écran d'activation. Le poste est activé définitivement (jusqu'à changement de matériel réseau significatif).
+
+La clé est liée à l'empreinte matérielle de cette machine précise — copier la base de données sur un autre poste ne rend pas ce poste activé ; chaque machine a besoin de sa propre clé.
+
 ## 1. Choisir le poste central
 
 Le poste central héberge le serveur (`KarateScoring.Api`) et la base SQLite. Il doit rester allumé et connecté au réseau local pendant toute la durée du tournoi. Recommandé : un ordinateur portable branché sur secteur, avec un onduleur si possible.

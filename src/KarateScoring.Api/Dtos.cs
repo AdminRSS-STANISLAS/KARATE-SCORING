@@ -65,6 +65,9 @@ public record ClassementDto(int Position, string? Medaille, string Nom, string C
 
 public record AuditDto(DateTime Horodatage, string EntiteType, int EntiteId, string Action, string? AncienneValeur, string? NouvelleValeur, string? Utilisateur);
 
+public record LicenceStatusDto(bool Active, string EmpreinteMachine);
+public record ActiverLicenceRequest(string Cle);
+
 public record SecuriteStatusDto(bool CodeConfigure);
 public record DefinirCodeRequest(string NouveauCode, string? AncienCode);
 public record ResetRequest(string? Code);

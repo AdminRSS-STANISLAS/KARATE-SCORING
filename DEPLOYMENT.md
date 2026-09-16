@@ -6,6 +6,8 @@ Ce guide couvre la mise en place réelle : un poste central qui sert plusieurs p
 
 Le poste central héberge le serveur (`KarateScoring.Api`) et la base SQLite. Il doit rester allumé et connecté au réseau local pendant toute la durée du tournoi. Recommandé : un ordinateur portable branché sur secteur, avec un onduleur si possible.
 
+Sur ce poste, l'organisateur lance normalement **Karate Scoring.exe** — l'application Windows installée (icône, écran de démarrage, fenêtre dédiée), pas un navigateur. Cette application desktop héberge le même serveur `KarateScoring.Api` en arrière-plan ; les postes tatami continuent d'ouvrir un navigateur classique sur l'adresse réseau du poste central, exactement comme avant.
+
 ## 2. Mettre en place le réseau local
 
 - Un routeur/point d'accès Wi-Fi local suffit (pas besoin d'accès Internet — un routeur non connecté au WAN fonctionne).
@@ -14,11 +16,13 @@ Le poste central héberge le serveur (`KarateScoring.Api`) et la base SQLite. Il
 
 ## 3. Démarrer le serveur
 
+Poste organisateur Windows (recommandé) : lancer **Karate Scoring** depuis le menu Démarrer ou l'icône du Bureau (installé via `installer/setup.iss`, voir §6). Au premier démarrage, l'application demande où enregistrer les données (compétitions, résultats, sauvegardes) — comme le dossier de sauvegarde d'un jeu vidéo local ; ce choix n'est demandé qu'une fois.
+
+Pour un développement/test, ou sur une plateforme sans coque desktop :
+
 ```bash
 dotnet run --project src/KarateScoring.Api --configuration Release
 ```
-
-Ou, après une publication (voir §6), lancer directement l'exécutable produit.
 
 ## 4. Trouver l'adresse à donner aux postes tatami
 
@@ -30,15 +34,17 @@ Si plusieurs adresses IP apparaissent (ex. adaptateurs virtuels VPN/machine virt
 
 Sur l'écran **Tatamis**, créer une **Aire** par tapis de compétition, puis l'assigner à chaque **Tableau** concerné (écran Tableaux). Chaque poste de tatami ouvre l'écran **Arbitrage Kumite** ou **Jury Kata** filtré sur son aire, et suit la file d'attente (en cours / suivant / à venir).
 
-## 6. Publier une version optimisée (optionnel, recommandé pour un vrai tournoi)
+## 6. Publier une version optimisée (recommandé pour un vrai tournoi)
 
-Sous Windows, le script fourni produit un exécutable autonome (aucun .NET SDK requis sur le poste organisateur) :
+Sous Windows, le script fourni produit un exécutable autonome — la coque desktop **KarateScoring.exe** (icône, écran de démarrage) à la racine, et le serveur `api/KarateScoring.Api.exe` dans un sous-dossier (aucun .NET SDK requis sur le poste organisateur) :
 
 ```powershell
 ./scripts/publish.ps1
 ```
 
-Résultat dans `publish/win-x64/KarateScoring.Api.exe` (et une archive `publish/karate-scoring_win-x64.zip` prête à copier sur le poste organisateur). Pour une autre plateforme : `./scripts/publish.ps1 -Runtime linux-x64` ou `-Runtime osx-x64`.
+Résultat dans `publish/win-x64/` (et une archive `publish/karate-scoring_win-x64.zip`). Pour une autre plateforme, serveur seul sans coque desktop (WPF est Windows uniquement) : `./scripts/publish.ps1 -Runtime linux-x64` ou `-Runtime osx-x64`.
+
+Pour un vrai installateur Windows (icône, raccourcis Bureau/menu Démarrer, désinstallation propre) : publier d'abord comme ci-dessus, puis compiler `installer/setup.iss` avec [Inno Setup 6](https://jrsoftware.org/isinfo.php) (`iscc installer\setup.iss`) — produit `installer/output/KarateScoringSetup.exe`, prêt à distribuer.
 
 Alternative manuelle (nécessite le .NET SDK sur le poste cible) :
 

@@ -24,6 +24,7 @@ Chaque poste (organisateur, arbitre, écran public) est simplement un navigateur
 | Projet | Rôle |
 |---|---|
 | `src/KarateScoring.Api` | **Application active.** API REST ASP.NET Core (.NET 9) + frontend statique (`wwwroot/`, HTML/CSS/JS vanilla, sans framework front). C'est le produit livré. |
+| `src/KarateScoring.Desktop` | Coque Windows native (WPF + WebView2) : icône, écran de démarrage animé, fenêtre dédiée. Lance `KarateScoring.Api` comme processus enfant (pas d'hébergement in-process) et affiche son interface dans une fenêtre WebView2 plutôt qu'un navigateur — le moteur web reste inchangé, les postes tatami continuent d'ouvrir un navigateur classique sur le réseau local. |
 | `src/FkcScoring.Core` | Domaine métier partagé : entités EF Core, `DbContext`, moteurs de règles (scoring, tableaux, kata), services (sécurité, audit, sauvegarde, réseau, chemins). Référencé par l'API. |
 | `tests/FkcScoring.Core.Tests` | Tests unitaires du domaine métier (scoring, tableaux, sécurité, sauvegarde, concurrence). |
 | `tests/KarateScoring.Api.Tests` | Tests d'intégration HTTP (`WebApplicationFactory`) : exercent les vrais contrôleurs via de vraies requêtes HTTP contre une base SQLite temporaire — routage, validation, sérialisation JSON, persistance. |

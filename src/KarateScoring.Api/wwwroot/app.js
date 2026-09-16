@@ -229,8 +229,11 @@ const NAV = [
   { id: "securite", label: "Sécurité", ico: "⛨", kanji: "安全" },
 ];
 
+let lastRenderedRoute = null;
 async function renderApp() {
   if (currentRoute === "public") { await renderPublicScreen(); return; }
+  const estNouvelEcran = currentRoute !== lastRenderedRoute; // rejoue la transition seulement au changement de route, pas à chaque interaction (score, formulaire...)
+  lastRenderedRoute = currentRoute;
   competitionsCache = await api.get("/competitions").catch(() => []);
   if (activeCompetitionId && !competitionsCache.some((c) => c.id === activeCompetitionId)) setActiveCompetition(null);
   if (!networkInfoCache) networkInfoCache = await api.get("/network-info").catch(() => null);
@@ -248,7 +251,9 @@ async function renderApp() {
   let html;
   try { html = await renderScreen(); }
   catch (e) { html = `<div class="card"><p class="error">${esc(e.message || String(e))}</p></div>`; }
-  document.getElementById("screenRoot").innerHTML = html;
+  const root = document.getElementById("screenRoot");
+  root.innerHTML = html;
+  if (estNouvelEcran) root.classList.add("screen-enter");
 }
 
 function renderSidebar() {
@@ -311,9 +316,18 @@ async function screenAccueil() {
     </div>`;
   }
 
-  const cats = await api.get(`/competitions/${comp.id}/categories`);
+  const [cats, participants, aires] = await Promise.all([
+    api.get(`/competitions/${comp.id}/categories`), api.get("/participants"), api.get(`/competitions/${comp.id}/aires`),
+  ]);
   const avecTableau = cats.filter((c) => c.hasTableau);
   const tableaux = await Promise.all(avecTableau.map(async (c) => ({ cat: c, tableau: await api.get(`/categories/${c.id}/tableau`) })));
+
+  const statsHtml = `<div class="stats-row">
+    ${statCard("◆", competitionsCache.length, "Compétitions")}
+    ${statCard("◉", participants.length, "Participants")}
+    ${statCard("▤", cats.length, "Catégories")}
+    ${statCard("▣", aires.length, "Tatamis actifs")}
+  </div>`;
 
   const brackets = tableaux.map(({ cat, tableau }) => {
     let html;
@@ -341,8 +355,12 @@ async function screenAccueil() {
     </div>` : "";
 
   return `<div class="topbar"><div><div class="crumb">Karate Scoring</div><h1>Bienvenue à ${esc(comp.nom)}${comp.lieu ? " — " + esc(comp.lieu) : ""}</h1></div></div>
+  ${statsHtml}
   ${brackets || '<p class="empty">Aucun tableau généré pour l\'instant — rendez-vous dans l\'écran Tableaux.</p>'}
   ${suivantHtml}`;
+}
+function statCard(icon, valeur, label) {
+  return `<div class="stat-card"><div class="stat-ico">${icon}</div><div class="stat-body"><div class="stat-val">${valeur}</div><div class="stat-label">${esc(label)}</div></div></div>`;
 }
 
 /* ---- Compétitions ---- */
@@ -1287,6 +1305,8 @@ appEl.addEventListener("submit", async (e) => {
   const form = e.target;
   if (!form.id) return;
   e.preventDefault();
+  const submitBtn = form.querySelector('button[type="submit"]');
+  if (submitBtn) submitBtn.classList.add("btn-loading");
   const f = new FormData(form);
 
   if (form.id === "form-competition") {

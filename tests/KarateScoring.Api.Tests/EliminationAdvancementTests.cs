@@ -8,12 +8,14 @@ namespace KarateScoring.Api.Tests;
 /// ce nouveau combat (pas simplement reportée) — exactement le comportement que l'utilisateur a demandé
 /// de vérifier pour l'affichage du tableau à crochets.
 /// </summary>
-public class EliminationAdvancementTests : IDisposable
+public class EliminationAdvancementTests : IDisposable, IAsyncLifetime
 {
     private readonly ApiFactory _factory = new();
     private readonly HttpClient _client;
 
     public EliminationAdvancementTests() => _client = _factory.CreateClient();
+    public Task InitializeAsync() => _factory.ActiverLicenceAsync(_client);
+    public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose() => _factory.Dispose();
 
     [Fact]

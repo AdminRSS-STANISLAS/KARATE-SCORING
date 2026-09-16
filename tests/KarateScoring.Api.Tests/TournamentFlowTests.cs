@@ -13,12 +13,14 @@ namespace KarateScoring.Api.Tests;
 /// défaut), donc créer l'<see cref="ApiFactory"/> ici plutôt que via <c>IClassFixture</c> donne à chaque
 /// test sa propre base isolée — important pour <see cref="SecurityAndBackupSmokeTests"/> notamment, où
 /// un code administrateur défini par un test ne doit pas fuiter vers les suivants.</summary>
-public class TournamentFlowTests : IDisposable
+public class TournamentFlowTests : IDisposable, IAsyncLifetime
 {
     private readonly ApiFactory _factory = new();
     private readonly HttpClient _client;
 
     public TournamentFlowTests() => _client = _factory.CreateClient();
+    public Task InitializeAsync() => _factory.ActiverLicenceAsync(_client);
+    public Task DisposeAsync() => Task.CompletedTask;
     public void Dispose() => _factory.Dispose();
 
     [Fact]

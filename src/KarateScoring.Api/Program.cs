@@ -56,6 +56,27 @@ using (var scope = app.Services.CreateScope())
     db.Database.Migrate();
 }
 
+// Blocage total tant que ce poste n'est pas activé (cahier §21, "vendre sans se faire voler le
+// logiciel") — seul /api/licence reste joignable, sans quoi personne ne pourrait jamais activer un
+// poste neuf. Le frontend statique (index.html/app.js) reste servi tel quel : c'est lui qui affiche
+// l'écran d'activation en lisant ce même statut via /api/licence.
+app.Use(async (context, next) =>
+{
+    var path = context.Request.Path;
+    if (!path.StartsWithSegments("/api") || path.StartsWithSegments("/api/licence")) { await next(); return; }
+
+    using var scope = context.RequestServices.CreateScope();
+    var db = scope.ServiceProvider.GetRequiredService<FkcScoringContext>();
+    var parametres = await db.Parametres.FirstOrDefaultAsync(p => p.Id == 1);
+    if (!LicenceService.ValiderCle(parametres?.LicenceCle, LicenceService.EmpreinteMachine()))
+    {
+        context.Response.StatusCode = StatusCodes.Status402PaymentRequired;
+        await context.Response.WriteAsJsonAsync(new { detail = "Licence Karate Scoring non activée sur ce poste." });
+        return;
+    }
+    await next();
+});
+
 app.UseDefaultFiles();
 app.UseStaticFiles();
 app.MapControllers();

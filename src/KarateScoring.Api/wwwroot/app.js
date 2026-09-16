@@ -230,7 +230,28 @@ const NAV = [
 ];
 
 let lastRenderedRoute = null;
+function renderActivationScreen(licence) {
+  document.getElementById("app").innerHTML = `<div class="welcome-screen">
+    <img class="welcome-logo" src="assets/karate-scoring-logo.jpg" alt="Karate Scoring">
+    <h1>Activation requise</h1>
+    <p class="welcome-msg">Ce poste n'est pas encore activé. Communiquez le code ci-dessous à votre fournisseur pour recevoir votre clé d'activation, puis saisissez-la ici.</p>
+    <div class="card" style="max-width:420px;text-align:left;">
+      <label>Code du poste</label>
+      <div class="row-inline" style="align-items:center;">
+        <code id="empreinte-machine" style="flex:1;font-size:15px;letter-spacing:.04em;padding:8px 10px;background:var(--paper-sunken);border-radius:var(--radius-sm);">${esc(licence.empreinteMachine)}</code>
+        <button class="btn btn-sm btn-ghost" type="button" data-action="copier-empreinte">Copier</button>
+      </div>
+      <form id="form-activer-licence" style="margin-top:14px;">
+        ${field("Clé d'activation", "cle", "text", "XXXX-XXXX-XXXX-XXXX", true)}
+        <button class="btn btn-primary" type="submit" style="width:100%;">Activer</button>
+      </form>
+    </div>
+  </div>`;
+}
+
 async function renderApp() {
+  const licence = await api.get("/licence").catch(() => null);
+  if (licence && !licence.active) { renderActivationScreen(licence); return; }
   if (currentRoute === "public") { await renderPublicScreen(); return; }
   const estNouvelEcran = currentRoute !== lastRenderedRoute; // rejoue la transition seulement au changement de route, pas à chaque interaction (score, formulaire...)
   lastRenderedRoute = currentRoute;
@@ -1203,6 +1224,12 @@ appEl.addEventListener("click", async (e) => {
   }
   if (a === "gen-elim-apres-poules") { await safe(() => api.post(`/tableaux/${btn.dataset.tab}/phase-elimination`)); await renderApp(); return; }
   if (a === "select-tatami") { routeState.tatamiAireId = Number(btn.dataset.id); await renderApp(); return; }
+  if (a === "copier-empreinte") {
+    const code = document.getElementById("empreinte-machine").textContent;
+    try { await navigator.clipboard.writeText(code); toast("Code copié : " + code); }
+    catch (e) { prompt("Copiez ce code :", code); }
+    return;
+  }
   if (a === "copy-tatami-link" || a === "copy-public-link") {
     const kind = a === "copy-tatami-link" ? "tatami" : "public";
     const url = location.origin + "#" + kind + "/" + btn.dataset.id;
@@ -1351,6 +1378,9 @@ appEl.addEventListener("submit", async (e) => {
     operateurNom = (f.get("nom") || "").trim();
     localStorage.setItem("karate_scoring_operateur", operateurNom);
     toast("Nom d'opérateur enregistré.");
+  } else if (form.id === "form-activer-licence") {
+    const ok = await safe(() => api.post("/licence/activer", { cle: (f.get("cle") || "").trim() }));
+    if (ok) toast("Poste activé.");
   } else if (form.id === "form-code-admin") {
     const ok = await safe(() => api.post("/securite/code", { nouveauCode: f.get("nouveauCode"), ancienCode: f.get("ancienCode") || null }));
     if (ok) { securiteCache = await api.get("/securite").catch(() => securiteCache); toast("Code administrateur enregistré."); }

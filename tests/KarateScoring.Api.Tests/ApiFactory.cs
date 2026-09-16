@@ -1,3 +1,5 @@
+using System.Net.Http.Json;
+using FkcScoring.Core.Domain;
 using Microsoft.AspNetCore.Mvc.Testing;
 
 namespace KarateScoring.Api.Tests;
@@ -20,6 +22,19 @@ public class ApiFactory : WebApplicationFactory<Program>, IDisposable
     {
         Directory.CreateDirectory(_dir);
         Environment.SetEnvironmentVariable("KARATE_SCORING_DB_PATH", DbPath);
+    }
+
+    /// <summary>Chaque test démarre sans licence active (comme un poste neuf) — l'API refuse tout en
+    /// dehors de /api/licence tant que ce n'est pas fait, donc chaque suite de tests doit s'activer
+    /// elle-même avant d'exercer quoi que ce soit d'autre. Utilise LicenceService directement (même
+    /// secret que la production) plutôt qu'un contournement réservé aux tests, pour exercer le vrai
+    /// flux d'activation, pas un chemin qui n'existe qu'en test.</summary>
+    public async Task ActiverLicenceAsync(HttpClient client)
+    {
+        var statut = await client.GetFromJsonAsync<LicenceStatusDto>("/api/licence");
+        var cle = LicenceService.GenererCle(statut!.EmpreinteMachine);
+        var res = await client.PostAsJsonAsync("/api/licence/activer", new ActiverLicenceRequest(cle));
+        res.EnsureSuccessStatusCode();
     }
 
     protected override void Dispose(bool disposing)
